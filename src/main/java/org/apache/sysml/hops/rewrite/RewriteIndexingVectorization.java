@@ -49,7 +49,7 @@ public class RewriteIndexingVectorization extends HopRewriteRule
 		throws HopsException
 	{
 		if( roots == null )
-			return roots;
+			return null;
 
 		for( Hop h : roots )
 			rule_IndexingVectorization( h );
@@ -62,7 +62,7 @@ public class RewriteIndexingVectorization extends HopRewriteRule
 		throws HopsException
 	{
 		if( root == null )
-			return root;
+			return null;
 		
 		rule_IndexingVectorization( root );
 		
