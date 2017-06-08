@@ -83,9 +83,7 @@ public class UnaryOp extends Hop implements MultiThreadedHop
 
 	@Override
 	public String getOpString() {
-		String s = new String("");
-		s += "u(" + _op.toString().toLowerCase() + ")";
-		return s;
+		return "u(" + _op.toString().toLowerCase() + ")";
 	}
 
 	@Override

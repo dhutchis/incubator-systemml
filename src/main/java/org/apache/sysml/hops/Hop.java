@@ -58,17 +58,19 @@ public abstract class Hop
 	 * Optional hop interface, to be implemented by multi-threaded hops.
 	 */
 	public interface MultiThreadedHop {
-		public abstract void setMaxNumThreads( int k );
-		public abstract int getMaxNumThreads();
+		void setMaxNumThreads( int k );
+		int getMaxNumThreads();
 	}
 
-	// static variable to assign an unique ID to every hop that is created
+	/** static variable to assign an unique ID to every hop that is created */
 	private static IDSequence _seqHopID = new IDSequence();
 	
 	protected long _ID;
 	protected String _name;
 	protected DataType _dataType;
 	protected ValueType _valueType;
+	/** Used while a Visitor traverses a Hop DAG, in order to see when the Visitor visits a
+	 * common sub-expression (can happen in the presence of operators with more than one input or output). */
 	protected boolean _visited = false;
 	protected long _dim1 = -1;
 	protected long _dim2 = -1;
@@ -77,40 +79,43 @@ public abstract class Hop
 	protected long _nnz = -1;
 	protected UpdateType _updateType = UpdateType.COPY;
 
+	/** Operators that consume this Hop. */
 	protected ArrayList<Hop> _parent = new ArrayList<>();
+	/** List of children. Each Hop has a fixed number of inputs.
+	 * These may be dynamically changed during rewriting. */
 	protected ArrayList<Hop> _input = new ArrayList<>(getArity() == -1 ? 5 : getArity());
 
 	protected ExecType _etype = null; //currently used exec type
 	protected ExecType _etypeForced = null; //exec type forced via platform or external optimizer
 	
-	// Estimated size for the output produced from this Hop
+	/** Estimated size for the output produced from this Hop */
 	protected double _outputMemEstimate = OptimizerUtils.INVALID_SIZE;
 	
-	// Estimated size for the entire operation represented by this Hop
-	// It includes the memory required for all inputs as well as the output 
+	/** Estimated size for the entire operation represented by this Hop
+	 * It includes the memory required for all inputs as well as the output */
 	protected double _memEstimate = OptimizerUtils.INVALID_SIZE;
 	protected double _processingMemEstimate = 0;
 	protected double _spBroadcastMemEstimate = 0;
 	protected boolean _validCPSizeEstimate = false;
 	
-	// indicates if there are unknowns during compilation 
-	// (in that case re-complication ensures robustness and efficiency)
+	/** Indicates if there are unknowns during compilation
+	 * (in that case re-complication ensures robustness and efficiency) */
 	protected boolean _requiresRecompile = false;
 	
-	// indicates if the output of this hop needs to be reblocked
-	// (usually this happens on persistent reads dataops)
+	/** indicates if the output of this hop needs to be reblocked
+	 * (usually this happens on persistent reads dataops) */
 	protected boolean _requiresReblock = false;
 	
-	// indicates if the output of this hop needs to be compressed
-	// (this happens on persistent reads after reblock but before checkpoint)
+	/** indicates if the output of this hop needs to be compressed
+	 *  (this happens on persistent reads after reblock but before checkpoint) */
 	protected boolean _requiresCompression = false;
 	
-	// indicates if the output of this hop needs to be checkpointed (cached)
-	// (the default storage level for caching is not yet exposed here)
+	/** indicates if the output of this hop needs to be checkpointed (cached)
+	 *  (the default storage level for caching is not yet exposed here) */
 	protected boolean _requiresCheckpoint = false;
 	
-	// indicates if the output of this hops needs to contain materialized empty blocks 
-	// if those exists; otherwise only blocks w/ non-zero values are materialized
+	/** indicates if the output of this hops needs to contain materialized empty blocks
+	 *  if those exists; otherwise only blocks w/ non-zero values are materialized */
 	protected boolean _outputEmptyBlocks = true;
 	
 	private Lop _lops = null;
@@ -194,10 +199,10 @@ public abstract class Hop
 	{		
 		if( _etype == ExecType.CP )
 		{
-			boolean invalid = false;
+			boolean invalid;
 			
 			//Step 1: check dimensions of output and all inputs (INTEGER)
-			invalid |= !OptimizerUtils.isValidCPDimensions(_dim1, _dim2);
+			invalid = !OptimizerUtils.isValidCPDimensions(_dim1, _dim2);
 			for( Hop in : getInput() )
 				invalid |= !OptimizerUtils.isValidCPDimensions(in._dim1, in._dim2);
 			
@@ -694,8 +699,8 @@ public abstract class Hop
 		_memEstimate = getInputOutputSize();
 		
 		//update optional valid cp size estimate (based on worst-case dimensions)
-		_validCPSizeEstimate = (wstats!=null) ? OptimizerUtils.isValidCPMatrixSize(
-			wstats[0], wstats[1], OptimizerUtils.getSparsity(wstats[0], wstats[1], wstats[2])) : false;
+		_validCPSizeEstimate = (wstats != null) && OptimizerUtils
+				.isValidCPMatrixSize(wstats[0], wstats[1], OptimizerUtils.getSparsity(wstats[0], wstats[1], wstats[2]));
 	}
 
 	

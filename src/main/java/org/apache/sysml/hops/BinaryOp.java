@@ -756,15 +756,13 @@ public class BinaryOp extends Hop
 
 	@Override
 	public String getOpString() {
-		String s = new String("");
-		s += "b(" + HopsOpOp2String.get(op) + ")";
-		return s;
+		return "b(" + HopsOpOp2String.get(op) + ")";
 	}
 
 	@Override
 	protected double computeOutputMemEstimate( long dim1, long dim2, long nnz )
 	{		
-		double ret = 0;
+		double ret;
 		
 		//preprocessing step (recognize unknowns)
 		if( dimsKnown() && _nnz<0 ) //never after inference
@@ -817,8 +815,8 @@ public class BinaryOp extends Hop
 		else if ( op == OpOp2.SOLVE ) {
 			// x=solve(A,b) relies on QR decomposition of A, which is done using Apache commons-math
 			// matrix of size same as the first input
-			double interOutput = OptimizerUtils.estimateSizeExactSparsity(getInput().get(0).getDim1(), getInput().get(0).getDim2(), 1.0); 
-			return interOutput;
+			return (double) OptimizerUtils
+					.estimateSizeExactSparsity(getInput().get(0).getDim1(), getInput().get(0).getDim2(), 1.0);
 
 		}
 

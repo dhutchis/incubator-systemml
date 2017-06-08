@@ -113,7 +113,7 @@ public class LiteralOp extends Hop
 
 	@Override
 	public String getOpString() {
-		String val = null;
+		String val;
 		switch (getValueType()) {
 			case DOUBLE:
 				val = Double.toString(value_double);
@@ -136,7 +136,7 @@ public class LiteralOp extends Hop
 	@Override
 	protected double computeOutputMemEstimate( long dim1, long dim2, long nnz )
 	{		
-		double ret = 0;
+		double ret;
 		
 		switch( getValueType() ) {
 			case INT:
