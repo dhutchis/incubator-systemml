@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -70,6 +71,8 @@ import org.apache.sysml.runtime.instructions.spark.CSVReblockSPInstruction;
 import org.apache.sysml.runtime.instructions.spark.ReblockSPInstruction;
 import org.apache.sysml.runtime.instructions.spark.SPInstruction;
 import org.apache.sysml.yarn.ropt.YarnClusterAnalyzer;
+
+import com.google.common.collect.Multiset;
 
 public class Explain 
 {	
@@ -552,14 +555,24 @@ public class Explain
 		//indentation
 		sb.append(offset);
 		
+		explainSingleHop(hop, sb);
+		
+		sb.append('\n');
+		
+		hop.setVisited();
+		
+		return sb.toString();
+	}
+
+	private static StringBuilder explainSingleHop(Hop hop, StringBuilder sb) {
 		//hop id
 		if( SHOW_DATA_DEPENDENCIES )
-			sb.append("("+hop.getHopID()+") ");
-		
+			sb.append("(").append(hop.getHopID()).append(") ");
+
 		//operation string
 		sb.append(hop.getOpString());
-		
-		//input hop references 
+
+		//input hop references
 		if( SHOW_DATA_DEPENDENCIES ) {
 			StringBuilder childs = new StringBuilder();
 			childs.append(" (");
@@ -570,29 +583,29 @@ public class Explain
 					childs.append(input.getHopID());
 					childAdded = true;
 				}
-			childs.append(")");		
+			childs.append(")");
 			if( childAdded )
 				sb.append(childs.toString());
 		}
-		
+
 		//matrix characteristics
-		sb.append(" [" + hop.getDim1() + "," 
-		               + hop.getDim2() + "," 
-				       + hop.getRowsInBlock() + "," 
-		               + hop.getColsInBlock() + "," 
-				       + hop.getNnz());
-		
+		sb.append(" [").append(hop.getDim1()).append(",")
+				.append(hop.getDim2()).append(",")
+				.append(hop.getRowsInBlock()).append(",")
+				.append(hop.getColsInBlock()).append(",")
+				.append(hop.getNnz());
+
 		if (hop.getUpdateType().isInPlace())
-			sb.append("," + hop.getUpdateType().toString().toLowerCase());
-		
+			sb.append(",").append(hop.getUpdateType().toString().toLowerCase());
+
 		sb.append("]");
-		
+
 		//memory estimates
-		sb.append(" [" + showMem(hop.getInputMemEstimate(), false) + "," 
-		               + showMem(hop.getIntermediateMemEstimate(), false) + "," 
-				       + showMem(hop.getOutputMemEstimate(), false) + " -> " 
-		               + showMem(hop.getMemEstimate(), true) + "]");
-		
+		sb.append(" [").append(showMem(hop.getInputMemEstimate(), false)).append(",")
+				.append(showMem(hop.getIntermediateMemEstimate(), false)).append(",")
+				.append(showMem(hop.getOutputMemEstimate(), false)).append(" -> ")
+				.append(showMem(hop.getMemEstimate(), true)).append("]");
+
 		//data flow properties
 		if( SHOW_DATA_FLOW_PROPERTIES ) {
 			if( hop.requiresReblock() && hop.requiresCheckpoint() )
@@ -602,16 +615,50 @@ public class Explain
 			else if( hop.requiresCheckpoint() )
 				sb.append(" [chkpt]");
 		}
-		
+
 		//exec type
 		if (hop.getExecType() != null)
-			sb.append(", " + hop.getExecType());
-		
-		sb.append('\n');
-		
-		hop.setVisited();
-		
-		return sb.toString();
+			sb.append(", ").append(hop.getExecType());
+		return sb;
+	}
+
+	public static String explainSingleHop(Hop hop) {
+		return explainSingleHop(hop, new StringBuilder()).toString();
+	}
+
+	public static String explainSingleHops(Iterable<? extends Hop> hops) {
+		StringBuilder sb = new StringBuilder("[");
+		for (Iterator<? extends Hop> iterator = hops.iterator(); iterator.hasNext(); ) {
+			Hop hop = iterator.next();
+			explainSingleHop(hop, sb);
+			if (iterator.hasNext())
+				sb.append(",\n ");
+		}
+		return sb.append("\n]").toString();
+	}
+
+	public static String explainSingleHops(Map<? extends Hop, ?> hops) {
+		StringBuilder sb = new StringBuilder("[");
+		for (Iterator<? extends Map.Entry<? extends Hop,?>> iterator = hops.entrySet().iterator(); iterator.hasNext(); ) {
+			Entry<? extends Hop, ?> entry = iterator.next();
+			explainSingleHop(entry.getKey(), sb);
+			sb.append(" -> ").append(entry.getValue());
+			if (iterator.hasNext())
+				sb.append(",\n ");
+		}
+		return sb.append("\n]").toString();
+	}
+
+	public static String explainSingleHops(Multiset<? extends Hop> hops) {
+		StringBuilder sb = new StringBuilder("[");
+		for (Iterator<? extends Multiset.Entry<? extends Hop>> iterator = hops.entrySet().iterator(); iterator.hasNext(); ) {
+			Multiset.Entry<? extends Hop> entry = iterator.next();
+			explainSingleHop(entry.getElement(), sb);
+			sb.append(" -> ").append(entry.getCount());
+			if (iterator.hasNext())
+				sb.append(",\n ");
+		}
+		return sb.append("\n]").toString();
 	}
 
 	//////////////
