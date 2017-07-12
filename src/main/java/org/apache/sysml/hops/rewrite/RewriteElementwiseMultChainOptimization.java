@@ -162,7 +162,7 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 	/**
 	 * A Comparator that orders Hops by their data type, dimention, and sparsity.
 	 * The order is as follows:
-	 * 		scalars > row vectors > col vectors >
+	 * 		scalars > col vectors > row vectors >
 	 *      non-vector matrices ordered by sparsity (higher nnz first, unknown sparsity last) >
 	 *      other data types.
 	 * Disambiguate by Hop ID.
@@ -181,23 +181,23 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 		}
 
 		@Override
-		public final int compare(Hop o1, Hop o2) {
-			int c = Integer.compare(orderDataType[o1.getDataType().ordinal()], orderDataType[o2.getDataType().ordinal()]);
+		public final int compare(final Hop o1, final Hop o2) {
+			final int c = Integer.compare(orderDataType[o1.getDataType().ordinal()], orderDataType[o2.getDataType().ordinal()]);
 			if (c != 0) return c;
 
 			// o1 and o2 have the same data type
 			switch (o1.getDataType()) {
 			case MATRIX:
 				// two matrices; check for vectors
-				if (o1.getDim1() == 1) { // row vector
-						if (o2.getDim1() != 1) return 1; // row vectors are greatest of matrices
-						return compareBySparsityThenId(o1, o2); // both row vectors
-				} else if (o2.getDim1() == 1) { // 2 is row vector; 1 is not
-						return -1; // row vectors are the greatest matrices
-				} else if (o1.getDim2() == 1) { // col vector
-						if (o2.getDim2() != 1) return 1; // col vectors greater than non-vectors
+				if (o1.getDim2() == 1) { // col vector
+						if (o2.getDim2() != 1) return 1; // col vectors are greatest of matrices
 						return compareBySparsityThenId(o1, o2); // both col vectors
 				} else if (o2.getDim2() == 1) { // 2 is col vector; 1 is not
+						return -1; // col vectors are the greatest matrices
+				} else if (o1.getDim1() == 1) { // row vector
+						if (o2.getDim1() != 1) return 1; // row vectors greater than non-vectors
+						return compareBySparsityThenId(o1, o2); // both row vectors
+				} else if (o2.getDim1() == 1) { // 2 is row vector; 1 is not
 						return 1; // col vectors greater than non-vectors
 				} else { // both non-vectors
 						return compareBySparsityThenId(o1, o2);
@@ -206,9 +206,9 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 				return Long.compare(o1.getHopID(), o2.getHopID());
 			}
 		}
-		private int compareBySparsityThenId(Hop o1, Hop o2) {
+		private int compareBySparsityThenId(final Hop o1, final Hop o2) {
 			// the hop with more nnz is first; unknown nnz (-1) last
-			int c = Long.compare(o1.getNnz(), o2.getNnz());
+			final int c = Long.compare(o1.getNnz(), o2.getNnz());
 			if (c != 0) return c;
 			return Long.compare(o1.getHopID(), o2.getHopID());
 		}
