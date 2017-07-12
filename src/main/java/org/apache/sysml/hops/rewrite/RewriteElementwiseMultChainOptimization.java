@@ -21,6 +21,7 @@ package org.apache.sysml.hops.rewrite;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -34,15 +35,12 @@ import org.apache.sysml.hops.HopsException;
 import org.apache.sysml.hops.LiteralOp;
 import org.apache.sysml.parser.Expression;
 
-import com.google.common.collect.HashMultiset;
-import com.google.common.collect.Multiset;
-
 /**
  * Prerequisite: RewriteCommonSubexpressionElimination must run before this rule.
  *
  * Rewrite a chain of element-wise multiply hops that contain identical elements.
  * For example `(B * A) * B` is rewritten to `A * (B^2)` (or `(B^2) * A`), where `^` is element-wise power.
- * The order of the multiplicands depends on their data types, dimentions (matrix or vector), and sparsity.
+ * The order of the multiplicands depends on their data types, dimensions (matrix or vector), and sparsity.
  *
  * Does not rewrite in the presence of foreign parents in the middle of the e-wise multiply chain,
  * since foreign parents may rely on the individual results.
@@ -87,7 +85,7 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 		if (isBinaryMult(root)) {
 			final Hop left = root.getInput().get(0), right = root.getInput().get(1);
 			final Set<BinaryOp> emults = new HashSet<>();
-			final Multiset<Hop> leaves = HashMultiset.create();
+			final Map<Hop, Integer> leaves = new HashMap<>(); // poor man's HashMultiset
 			findEMultsAndLeaves((BinaryOp)root, emults, leaves);
 
 			// 2. Ensure it is profitable to do a rewrite.
@@ -109,7 +107,7 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 					final Hop newRoot = HopRewriteUtils.rewireAllParentChildReferences(root, replacement);
 
 					// 6. Recurse at leaves (no need to repeat the interior emults)
-					for (final Hop leaf : leaves.elementSet()) {
+					for (final Hop leaf : leaves.keySet()) {
 						recurseInputs(leaf);
 					}
 					return newRoot;
@@ -131,15 +129,15 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 		}
 	}
 
-	private static Hop constructReplacement(final Set<BinaryOp> emults, final Multiset<Hop> leaves) {
+	private static Hop constructReplacement(final Set<BinaryOp> emults, final Map<Hop, Integer> leaves) {
 		// Sort by data type
 		final SortedMap<Hop,Integer> sorted = new TreeMap<>(compareByDataType);
-		for (final Multiset.Entry<Hop> entry : leaves.entrySet()) {
-			final Hop h = entry.getElement();
+		for (final Map.Entry<Hop, Integer> entry : leaves.entrySet()) {
+			final Hop h = entry.getKey();
 			// unlink parents that are in the emult set(we are throwing them away)
 			// keep other parents
 			h.getParent().removeIf(parent -> parent instanceof BinaryOp && emults.contains(parent));
-			sorted.put(h, entry.getCount());
+			sorted.put(h, entry.getValue());
 		}
 		// sorted contains all leaves, sorted by data type, stripped from their parents
 
@@ -244,7 +242,7 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 	}
 
 	/**
-	 * A Comparator that orders Hops by their data type, dimention, and sparsity.
+	 * A Comparator that orders Hops by their data type, dimension, and sparsity.
 	 * The order is as follows:
 	 * 		scalars < col vectors < row vectors <
 	 *      non-vector matrices ordered by sparsity (higher nnz last, unknown sparsity last) >
@@ -324,7 +322,7 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 	 * @param emults Out parameter. The set of BinaryOp element-wise multiply hops in the emult chain (including root).
 	 * @param leaves Out parameter. The multiset of multiplicands in the emult chain.
 	 */
-	private static void findEMultsAndLeaves(final BinaryOp root, final Set<BinaryOp> emults, final Multiset<Hop> leaves) {
+	private static void findEMultsAndLeaves(final BinaryOp root, final Set<BinaryOp> emults, final Map<Hop, Integer> leaves) {
 		// Because RewriteCommonSubexpressionElimination already ran, it is safe to compare by equality.
 		emults.add(root);
 
@@ -334,12 +332,16 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 		if (isBinaryMult(left))
 			findEMultsAndLeaves((BinaryOp) left, emults, leaves);
 		else
-			leaves.add(left);
+			addMultiset(leaves, left);
 
 		if (isBinaryMult(right))
 			findEMultsAndLeaves((BinaryOp) right, emults, leaves);
 		else
-			leaves.add(right);
+			addMultiset(leaves, right);
+	}
+
+	private static <K> void addMultiset(final Map<K,Integer> map, final K k) {
+		map.put(k, map.getOrDefault(k, 0) + 1);
 	}
 
 	/**
@@ -348,7 +350,7 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 	 * @param leaves The multiset of multiplicands in the emult chain.
 	 * @return If the multiset is worth optimizing.
 	 */
-	private static boolean isOptimizable(Set<BinaryOp> emults, final Multiset<Hop> leaves) {
+	private static boolean isOptimizable(Set<BinaryOp> emults, final Map<Hop, Integer> leaves) {
 		return emults.size() >= 2;
 	}
 }
