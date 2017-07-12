@@ -44,6 +44,7 @@ import org.apache.sysml.parser.Expression;
  *
  * Does not rewrite in the presence of foreign parents in the middle of the e-wise multiply chain,
  * since foreign parents may rely on the individual results.
+ * Does not perform rewrites on an element-wise multiply if its dimensions are unknown.
  *
  * The new order of element-wise multiply chains is as follows:
  * <pre>
@@ -81,8 +82,8 @@ public class RewriteElementwiseMultChainOptimization extends HopRewriteRule {
 			return root;
 		root.setVisited();
 
-		// 1. Find immediate subtree of EMults.
-		if (isBinaryMult(root)) {
+		// 1. Find immediate subtree of EMults. Check dimsKnown.
+		if (isBinaryMult(root) && root.dimsKnown()) {
 			final Hop left = root.getInput().get(0), right = root.getInput().get(1);
 			final Set<BinaryOp> emults = new HashSet<>();
 			final Map<Hop, Integer> leaves = new HashMap<>(); // poor man's HashMultiset
