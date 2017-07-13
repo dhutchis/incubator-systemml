@@ -1960,7 +1960,7 @@ public class RewriteAlgebraicSimplificationDynamic extends HopRewriteRule
 			LOG.debug("Applied simplifyWeightedUnaryMM1 (line "+hi.getBeginLine()+")");	
 		}
 
-		//Pattern 1.5) (W*(U%*%t(V))*2 or 2*(W*(U%*%t(V))
+		//Pattern 2.7) (W*(U%*%t(V))*2 or 2*(W*(U%*%t(V))
 		if( !appliedPattern
 				&& hi instanceof BinaryOp && HopRewriteUtils.isValidOp(((BinaryOp)hi).getOp(), OpOp2.MULT)
 				&& (HopRewriteUtils.isLiteralOfValue(hi.getInput().get(0), 2)
@@ -1974,6 +1974,7 @@ public class RewriteAlgebraicSimplificationDynamic extends HopRewriteRule
 			}
 
 			if (       HopRewriteUtils.isBinary(nl, OpOp2.MULT)
+					&& nl.getParent().size()==1 // ensure no foreign parents
 					&& HopRewriteUtils.isEqualSize(nl.getInput().get(0), nl.getInput().get(1)) //prevent mv
 					&& nl.getDim2() > 1 //not applied for vector-vector mult
 					&& nl.getInput().get(0).getDataType() == DataType.MATRIX
