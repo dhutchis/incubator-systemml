@@ -20,7 +20,10 @@
 package org.apache.sysml.test.integration.functions.misc;
 
 import java.util.HashMap;
+import java.util.Random;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.sysml.api.DMLScript;
 import org.apache.sysml.api.DMLScript.RUNTIME_PLATFORM;
 import org.apache.sysml.lops.LopProperties.ExecType;
@@ -33,8 +36,9 @@ import org.junit.Test;
 /**
  * Test FindCorrelation algorithm
  */
-public class FindCorrelationTest extends AutomatedTestBase
+public final class FindCorrelationTest extends AutomatedTestBase
 {
+	private static final Log LOG = LogFactory.getLog(FindCorrelationTest.class.getName());
 	private static final String TEST_NAME1 = "FindCorrelationNaive";
 	private static final String TEST_NAME2 = "FindCorrelationAdvanced";
 	private static final String TEST_DIR = "functions/misc/";
@@ -96,18 +100,10 @@ public class FindCorrelationTest extends AutomatedTestBase
 //			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
 
-			int n = 8;
-			int nlog = (int)(Math.log(n)/Math.log(2)+1);
 
-			double[][] A = getRandomMatrix(nlog, n, 0, 1, 1.0, 7);
-			for (int i = 0; i < A.length; i++) {
-				for (int j = 0; j < A[i].length; j++) {
-					A[i][j] = A[i][j] <= 0.5 ? -1 : 1;
-				}
-			}
-//			double[][] Y = getRandomMatrix(rows, cols, -1, 1, Ysparsity, 3);
+
+			double[][] A = createInput();
 			writeInputMatrixWithMTD("A", A, true);
-//			writeInputMatrixWithMTD("Y", Y, true);
 
 			//execute tests
 			runTest(true, false, null, -1); 
@@ -122,5 +118,36 @@ public class FindCorrelationTest extends AutomatedTestBase
 			rtplatform = platformOld;
 			DMLScript.USE_LOCAL_SPARK_CONFIG = sparkConfigOld;
 		}
+	}
+
+	private static double[][] createInput() {
+		final int n = 8;
+		final int nlog = (int)(Math.log(n)/Math.log(2)+1);
+		final Random random = new Random(8);
+
+		final int ci, cj;
+		{
+			final int i0 = random.nextInt(n);
+			int j0;
+			do {
+				j0 = random.nextInt(i0);
+			} while (i0 == j0);
+			ci = Math.min(i0, j0);
+			cj = Math.max(i0, j0);
+		}
+		LOG.info("Correlated pair: ("+ci+", "+cj+")");
+
+		final double[][] A = new double[nlog][n]; //getRandomMatrix(nlog, n, 0, 1, 1.0, 7);
+		for (int i = 0; i < A.length; i++) {
+			A[i] = new double[n];
+			for (int j = 0; j < A[i].length; j++) {
+				if( i == cj ) {
+					A[cj][j] = random.nextDouble() < 0.7 ? A[ci][j] : -A[ci][j];
+				} else
+					A[i][j] = random.nextBoolean() ? -1 : 1;
+			}
+		}
+
+		return A;
 	}
 }

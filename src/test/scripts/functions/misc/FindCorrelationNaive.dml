@@ -14,7 +14,7 @@ A = read($1)
 
 ##########################################################
 ## Naive:
-X = abs( t(A)%*%A - diag(t(A)%*%A) )
+X =  t(A)%*%A - diag(diag(t(A)%*%A))
 X_rowmax = rowMaxs(X) # col vector of max val in each row
 X_rowidx = as.scalar(rowIndexMax(t(X_rowmax))) # row index of max val
 XR = X[X_rowidx,] # row vector

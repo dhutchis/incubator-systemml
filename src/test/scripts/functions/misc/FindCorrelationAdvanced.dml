@@ -41,8 +41,8 @@ for (i in 1:n23) { # todo: make parfor
 G = (M %*% A) %% 4 - (k%%2) - 1
 B = G %*% S
 
-#(g1,g2) = maxIndex(abs( t(B)%*%B - diag(t(B)%*%B) ))
-X = abs( t(B)%*%B - diag(t(B)%*%B) )
+#(g1,g2) = maxIndex( t(B)%*%B - diag(diag(t(B)%*%B)) )
+X =  t(B)%*%B - diag(diag(t(B)%*%B))
 X_rowmax = rowMaxs(X) # col vector of max val in each row
 g1 = as.scalar(rowIndexMax(t(X_rowmax))) # row index of max val
 XR = X[g1,] # row vector
@@ -50,7 +50,7 @@ g2 = as.scalar(rowIndexMax(XR)) # col index of max val
 
 AG1 = A[, (g1-1)*n13+1:g1*n13]
 AG2 = A[, (g2-1)*n13+1:g2*n13]
-Y = abs( t(AG1)%*%AG2 - diag(t(AG1)%*%AG2) )
+Y =  t(AG1)%*%AG2 - diag(diag(t(AG1)%*%AG2))
 
 Y_rowmax = rowMaxs(Y) # col vector of max val in each row
 Y_rowidx = as.scalar(rowIndexMax(t(Y_rowmax))) # row index of max val

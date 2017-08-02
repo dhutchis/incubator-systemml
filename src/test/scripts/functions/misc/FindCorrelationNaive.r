@@ -20,7 +20,7 @@ A = as.matrix(readMM(paste(args[1], "A.mtx", sep="")))
 
 ##########################################################
 ## Naive:
-X = abs( t(A)%*%A - diag(t(A)%*%A) )
+X =  t(A)%*%A - diag(diag(t(A)%*%A))
 X_rowmax = rowMaxs(X) # col vector of max val in each row
 X_rowidx = as.numeric( max.col(t(X_rowmax),ties.method="last") ) # row index of max val
 XR = X[X_rowidx,] # row vector
@@ -31,5 +31,6 @@ X_colidx = n - as.numeric( which.max(rev(XR)) ) + 1 # col index of max val
 Z = cbind(X_rowidx, X_colidx)
 
 print(paste0("(i,j): ",X_rowidx, ",",X_colidx))
+# print(A)
 # print(X)
 writeMM(as(Z, "CsparseMatrix"), paste(args[2], "O", sep=""));
