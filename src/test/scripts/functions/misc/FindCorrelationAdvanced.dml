@@ -24,17 +24,18 @@ for (i in 1:n23) { # todo: make parfor
 	# Generate k positions of '1's, then set those positions to 1.
 	# Keep drawing k positions of '1's until no duplicate positions, as checked by sorting and comparing
 	kvec = round(rand(rows=1, cols=k, min=1, max=nlog))
-	kvect = t(kvec)
-	kvecOrd1 = order(kvect, by=1, decreasing=FALSE, index.return=FALSE)
+	kvecOrd1 = order(target=t(kvec), by=1, decreasing=FALSE, index.return=FALSE)
 	kvecOrd = t(kvecOrd1)
 	kvecResid = kvecOrd[,2:k] - kvecOrd[,1:k-1]
 	while ( min(abs(kvecResid)) == 0 ) {
 		kvec = round(rand(rows=1, cols=k, min=1, max=nlog))
-		kvecOrd = t(order(t(kvec), by=1, decreasing=FALSE, index.return=FALSE))
+        kvecOrd1 = order(target=t(kvec), by=1, decreasing=FALSE, index.return=FALSE)
+        kvecOrd = t(kvecOrd1)
 		kvecResid = kvecOrd[,2:k] - kvecOrd[,1:k-1]
 	}
-	parfor (j in 1:k, check=0) {
-		M[i,kvecOrd[1,j]] = 1
+	for (j in 1:k) {
+		jj = as.scalar(kvecOrd[1,j])
+		M[i,jj] = 1.0
 	}
 }
 
@@ -47,6 +48,8 @@ X_rowmax = rowMaxs(X) # col vector of max val in each row
 g1 = as.scalar(rowIndexMax(t(X_rowmax))) # row index of max val
 XR = X[g1,] # row vector
 g2 = as.scalar(rowIndexMax(XR)) # col index of max val
+
+print("(g1,g2): " + g1 + ", " + g2)
 
 AG1 = A[, (g1-1)*n13+1:g1*n13]
 AG2 = A[, (g2-1)*n13+1:g2*n13]

@@ -31,6 +31,6 @@ X_colidx = n - as.numeric( which.max(rev(XR)) ) + 1 # col index of max val
 Z = cbind(X_rowidx, X_colidx)
 
 print(paste0("(i,j): ",X_rowidx, ",",X_colidx))
-# print(A)
-# print(X)
+print(A)
+print(X)
 writeMM(as(Z, "CsparseMatrix"), paste(args[2], "O", sep=""));
