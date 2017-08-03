@@ -44,8 +44,6 @@ public final class FindCorrelationTest extends AutomatedTestBase
 	private static final String TEST_DIR = "functions/misc/";
 	private static final String TEST_CLASS_DIR = TEST_DIR + FindCorrelationTest.class.getSimpleName() + "/";
 	
-//	private static final int rows = 123;
-//	private static final int cols = 321;
 	private static final double eps = Math.pow(10, -10);
 	
 	@Override
@@ -96,13 +94,17 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-explain", "hops", "-stats", "-args", input("A"), output("O")};
-//			fullRScriptName = HOME + testname + ".R";
+			programArgs = new String[] { "-explain", "hops", "-stats", "-args", input("k"), input("n"), input("A"), output("O")};
+			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
 
 
+			final int k = 2;
+			final int n = 8;
+			final double[][] A = createInput(n);
 
-			double[][] A = createInput();
+			writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
+			writeInputMatrixWithMTD("n", new double[][]{new double[] {n}}, true);
 			writeInputMatrixWithMTD("A", A, true);
 
 			//execute tests
@@ -120,8 +122,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		}
 	}
 
-	private static double[][] createInput() {
-		final int n = 8;
+	private static double[][] createInput(final int n) {
 		final int nlog = (int)(Math.log(n)/Math.log(2)+1);
 		final Random random = new Random(8);
 

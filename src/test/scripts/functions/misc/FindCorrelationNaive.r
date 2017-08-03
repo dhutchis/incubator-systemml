@@ -5,8 +5,8 @@ options(digits=22)
 library(Matrix)
 library("matrixStats")
 
-k = 2
-n = 2^3
+k = as.numeric(readMM(paste(args[1], "k.mtx", sep="")))
+n = as.numeric(readMM(paste(args[1], "n.mtx", sep="")))
 n13 = as.integer(n^(1.0/3.0))
 n23 = as.integer(n^(2.0/3.0))
 nlog = as.integer(log(n,2)+1)
