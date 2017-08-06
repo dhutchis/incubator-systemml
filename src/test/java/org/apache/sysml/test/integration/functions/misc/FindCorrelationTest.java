@@ -94,17 +94,27 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-explain", "hops", "-stats", "-args", input("k"), input("n"), input("A"), output("O")};
+			programArgs = new String[] { "-stats", "-args",
+					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"),
+					output("O")}; //"-explain", "hops",
 			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
 
 
-			final int k = 2;
 			final int n = 8;
-			final double[][] A = createInput(n);
+			final int k = 2; // log n / log log n
+			final double rho = 0.4;
+			final double c = 2 / (rho*rho);
+			final double alpha = 2 / rho;
+			final double t = rho/2 * c * Math.log(n) / Math.log(2);
+
+			final double[][] A = createInput(n, (int)(c*Math.log(n)/Math.log(2) +0.5));
 
 			writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
 			writeInputMatrixWithMTD("n", new double[][]{new double[] {n}}, true);
+			writeInputMatrixWithMTD("c", new double[][]{new double[] {c}}, true);
+			writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
+			writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
 			writeInputMatrixWithMTD("A", A, true);
 
 			//execute tests
@@ -122,8 +132,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		}
 	}
 
-	private static double[][] createInput(final int n) {
-		final int nlog = (int)(Math.log(n)/Math.log(2)+1);
+	private static double[][] createInput(final int n, final int numObs) {
 		final Random random = new Random(8);
 
 		final int ci, cj;
@@ -138,7 +147,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		}
 		LOG.info("Correlated pair: ("+ci+", "+cj+")");
 
-		final double[][] A = new double[nlog][n]; //getRandomMatrix(nlog, n, 0, 1, 1.0, 7);
+		final double[][] A = new double[numObs][n]; //getRandomMatrix(nlog, n, 0, 1, 1.0, 7);
 		for (int i = 0; i < A.length; i++) {
 			A[i] = new double[n];
 			for (int j = 0; j < A[i].length; j++) {

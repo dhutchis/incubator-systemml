@@ -7,9 +7,6 @@ library("matrixStats")
 
 k = as.numeric(readMM(paste(args[1], "k.mtx", sep="")))
 n = as.numeric(readMM(paste(args[1], "n.mtx", sep="")))
-n13 = as.integer(n^(1.0/3.0))
-n23 = as.integer(n^(2.0/3.0))
-nlog = as.integer(log(n,2)+1)
 
 # random matrix of -1 and 1
 # todo optimize to 0 and 1
