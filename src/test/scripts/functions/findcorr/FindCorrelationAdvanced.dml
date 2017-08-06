@@ -37,6 +37,21 @@ while (!ok) {
     for (i in 1:alphan23) { # todo: make parfor
         # Task: draw k '1's in a row vector of length log n
         s = sample(range=clogn, size=k, replacement=FALSE) # seed? maybe set new every loop? returns k x 1 col vector
+
+        # The following code is an alternative to the sample function.
+        # It generates k indices in [1,clogn] until all the indices are unique.
+        #kvec = round(rand(rows=1, cols=k, min=1, max=clogn))
+        #kvecOrd1 = order(target=t(kvec), by=1, decreasing=FALSE, index.return=FALSE)
+        #kvecOrd = t(kvecOrd1)
+        #kvecResid = kvecOrd[,2:k] - kvecOrd[,1:k-1]
+        #while ( min(abs(kvecResid)) == 0 ) {
+        #    kvec = round(rand(rows=1, cols=k, min=1, max=clogn))
+        #    kvecOrd1 = order(target=t(kvec), by=1, decreasing=FALSE, index.return=FALSE)
+        #    kvecOrd = t(kvecOrd1)
+        #    kvecResid = kvecOrd[,2:k] - kvecOrd[,1:k-1]
+        #}
+        #s = t(kvec)
+
         sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
         # construct a 1 x clogn row vector by filling the identified positions with 1s and the rest 0s
         sm = table(sOnes, s, 1, clogn)

@@ -94,7 +94,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-stats", "-explain", "runtime", "-args",
+			programArgs = new String[] { "-stats", "-explain", "hops", "-args",
 					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"),
 					output("O")}; //
 			fullRScriptName = HOME + testname + ".R";
