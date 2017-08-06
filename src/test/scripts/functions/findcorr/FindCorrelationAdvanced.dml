@@ -8,14 +8,17 @@ t = as.scalar(read($5))
 n13 = as.integer(n^(1.0/3.0))
 n23 = as.integer(n^(2.0/3.0))
 alphan23 = as.integer(alpha*n^(2.0/3.0))
-logn = as.integer(log(n,2)+1)
+logn = as.integer(log(n,2))
 clogn = as.integer(c*log(n,2))
 
 # random matrix of -1 and 1
 # todo optimize to 0 and 1
-#AR = rand(rows=logn, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
+#AR = rand(rows=clogn, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
 #A = -1 * (AR <= 0.5) + (AR > 0.5)
 A = read($6)    # clogn x n
+Ar = nrow(A)
+Ac = ncol(A)
+print("A is "+Ar+" by "+Ac)
 
 # Create S of size n x n23
 S = matrix(0, rows=n, cols=n23)
@@ -31,9 +34,9 @@ while (!ok) {
 
     # Create mask M of size alphan23 x clogn
     M = matrix(0, rows=alphan23, cols=clogn)
-    for (i in 1:n23) { # todo: make parfor
+    for (i in 1:alphan23) { # todo: make parfor
         # Task: draw k '1's in a row vector of length log n
-        s = sample(range=clogn, size=k, replacement=FALSE) # seed? returns k x 1 col vector
+        s = sample(range=clogn, size=k, replacement=FALSE) # seed? maybe set new every loop? returns k x 1 col vector
         sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
         # construct a 1 x clogn row vector by filling the identified positions with 1s and the rest 0s
         sm = table(sOnes, s, 1, clogn)
@@ -41,7 +44,7 @@ while (!ok) {
     }
 
     # alphan23 x n
-    G = (M %*% A) %% 4 - (k%%2) - 1
+    G = -(M %*% A) %% 4 + (k%%2) + 1
     # alphan23 x n23
     B = G %*% S
 
@@ -54,8 +57,8 @@ while (!ok) {
 
     #print("(g1,g2): " + g1 + ", " + g2)
 
-    AG1 = A[, (g1-1)*n13+1:g1*n13]
-    AG2 = A[, (g2-1)*n13+1:g2*n13]
+    AG1 = A[, (g1-1)*n13+1 : g1*n13]
+    AG2 = A[, (g2-1)*n13+1 : g2*n13]
     Y =  t(AG1)%*%AG2 - diag(diag(t(AG1)%*%AG2))
 
     Ymax = max(Y)

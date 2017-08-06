@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.sysml.test.integration.functions.misc;
+package org.apache.sysml.test.integration.functions.findcorr;
 
 import java.util.HashMap;
 import java.util.Random;
@@ -41,7 +41,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 	private static final Log LOG = LogFactory.getLog(FindCorrelationTest.class.getName());
 	private static final String TEST_NAME1 = "FindCorrelationNaive";
 	private static final String TEST_NAME2 = "FindCorrelationAdvanced";
-	private static final String TEST_DIR = "functions/misc/";
+	private static final String TEST_DIR = "functions/findcorr/";
 	private static final String TEST_CLASS_DIR = TEST_DIR + FindCorrelationTest.class.getSimpleName() + "/";
 	
 	private static final double eps = Math.pow(10, -10);
@@ -57,7 +57,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 	public void testFindCorrelationCPNaive() {
 		testFindCorrelation(TEST_NAME1, ExecType.CP);
 	}
-	
+
 	@Test
 	public void testFindCorrelationSPNaive() {
 		testFindCorrelation(TEST_NAME1, ExecType.SPARK);
@@ -94,21 +94,23 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-stats", "-args",
+			programArgs = new String[] { "-stats", "-explain", "runtime", "-args",
 					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"),
-					output("O")}; //"-explain", "hops",
+					output("O")}; //
 			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
 
 
-			final int n = 8;
-			final int k = 2; // log n / log log n
+			final int n = 64;
+			final int k = 5; // log n / log log n
 			final double rho = 0.4;
 			final double c = 2 / (rho*rho);
 			final double alpha = 2 / rho;
 			final double t = rho/2 * c * Math.log(n) / Math.log(2);
+			LOG.info(String.format("\nn: %d\tk: %d\trho: %f\nc: %f\t alpha: %f\tt: %f\nclogn: %f\tn13: %f\talphan23: %f\n", n, k, rho, c, alpha, t,
+					c*Math.log(n)/Math.log(2), Math.pow(n,1.0/3), alpha*Math.pow(n, 2.0/3)));
 
-			final double[][] A = createInput(n, (int)(c*Math.log(n)/Math.log(2) +0.5));
+			final double[][] A = createInput(n, (int)(c*Math.log(n)/Math.log(2)), rho);
 
 			writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
 			writeInputMatrixWithMTD("n", new double[][]{new double[] {n}}, true);
@@ -132,7 +134,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		}
 	}
 
-	private static double[][] createInput(final int n, final int numObs) {
+	private static double[][] createInput(final int n, final int numObs, final double rho) {
 		final Random random = new Random(8);
 
 		final int ci, cj;
@@ -140,19 +142,19 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			final int i0 = random.nextInt(n);
 			int j0;
 			do {
-				j0 = random.nextInt(i0);
+				j0 = random.nextInt(n);
 			} while (i0 == j0);
 			ci = Math.min(i0, j0);
 			cj = Math.max(i0, j0);
 		}
-		LOG.info("Correlated pair: ("+ci+", "+cj+")");
+		LOG.info("Correlated pair: ("+(ci+1)+", "+(cj+1)+")");
 
 		final double[][] A = new double[numObs][n]; //getRandomMatrix(nlog, n, 0, 1, 1.0, 7);
 		for (int i = 0; i < A.length; i++) {
 			A[i] = new double[n];
 			for (int j = 0; j < A[i].length; j++) {
-				if( i == cj ) {
-					A[cj][j] = random.nextDouble() < 0.7 ? A[ci][j] : -A[ci][j];
+				if( j == cj ) {
+					A[i][j] = random.nextDouble() < 0.5+rho/2 ? A[i][ci] : -A[i][ci];
 				} else
 					A[i][j] = random.nextBoolean() ? -1 : 1;
 			}
