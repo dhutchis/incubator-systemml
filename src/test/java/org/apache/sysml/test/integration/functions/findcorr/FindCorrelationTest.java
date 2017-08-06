@@ -94,9 +94,9 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-stats", "-explain", "recompile_hops", "-args",
+			programArgs = new String[] { "-args", //"-stats", "-explain", "recompile_hops",
 					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"),
-					output("O")}; //
+					output("O"), input("n13"), input("n23"), input("alphan23"), input("logn"), input("clogn")}; //
 			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
 
@@ -107,8 +107,11 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			final double c = 2 / (rho*rho);
 			final double alpha = 2 / rho;
 			final double t = rho/2 * c * Math.log(n) / Math.log(2);
-			LOG.info(String.format("\nn: %d\tk: %d\trho: %f\nc: %f\t alpha: %f\tt: %f\nclogn: %f\tn13: %f\talphan23: %f\n", n, k, rho, c, alpha, t,
-					c*Math.log(n)/Math.log(2), Math.pow(n,1.0/3), alpha*Math.pow(n, 2.0/3)));
+
+			final double n13 = Math.pow(n,1.0/3), n23 = Math.pow(n,2.0/3), alphan23 = alpha*Math.pow(n, 2.0/3);
+			final double logn = Math.log(n)/Math.log(2), clogn = c*Math.log(n)/Math.log(2);
+			LOG.info(String.format("\nn: %d\tk: %d\trho: %f\nc: %f\t alpha: %f\tt: %f\nclogn: %f\tn13: %f\talphan23: %f",
+					n, k, rho, c, alpha, t, clogn, n13, alphan23));
 
 			final double[][] A = createInput(n, (int)(c*Math.log(n)/Math.log(2)), rho);
 
@@ -118,6 +121,11 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
 			writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
 			writeInputMatrixWithMTD("A", A, true);
+			writeInputMatrixWithMTD("n13", new double[][]{new double[] {n13}}, true);
+			writeInputMatrixWithMTD("n23", new double[][]{new double[] {n23}}, true);
+			writeInputMatrixWithMTD("alphan23", new double[][]{new double[] {alphan23}}, true);
+			writeInputMatrixWithMTD("logn", new double[][]{new double[] {logn}}, true);
+			writeInputMatrixWithMTD("clogn", new double[][]{new double[] {clogn}}, true);
 
 			//execute tests
 			runTest(true, false, null, -1); 
