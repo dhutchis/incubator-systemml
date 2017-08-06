@@ -29,6 +29,7 @@ for (i in 1:n23) {
 ok = FALSE
 failCount = -1
 Y = matrix(0, rows=n13, cols=n13)
+sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
 while (!ok) {
     failCount = failCount + 1
 
@@ -52,7 +53,7 @@ while (!ok) {
         #}
         #s = t(kvec)
 
-        sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
+
         # construct a 1 x clogn row vector by filling the identified positions with 1s and the rest 0s
         sm = table(sOnes, s, 1, clogn)
         M[i,] = sm

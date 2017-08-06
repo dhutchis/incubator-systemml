@@ -84,7 +84,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		}
 		
 		boolean sparkConfigOld = DMLScript.USE_LOCAL_SPARK_CONFIG;
-		if( rtplatform == RUNTIME_PLATFORM.SPARK )
+		if( rtplatform == RUNTIME_PLATFORM.SPARK  || rtplatform == RUNTIME_PLATFORM.HYBRID_SPARK )
 			DMLScript.USE_LOCAL_SPARK_CONFIG = true;
 		
 		try
@@ -94,7 +94,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-stats", "-explain", "hops", "-args",
+			programArgs = new String[] { "-stats", "-explain", "recompile_hops", "-args",
 					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"),
 					output("O")}; //
 			fullRScriptName = HOME + testname + ".R";
