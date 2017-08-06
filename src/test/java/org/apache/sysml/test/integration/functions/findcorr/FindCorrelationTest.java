@@ -101,7 +101,8 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			rCmd = getRCmd(inputDir(), expectedDir());
 
 
-			final int n = 64;
+			// prefer n as a power of 2 that is divisible by 6
+			final int n = 1<<12;
 			final int k = 5; // log n / log log n
 			final double rho = 0.4;
 			final double c = 2 / (rho*rho);
@@ -110,10 +111,10 @@ public final class FindCorrelationTest extends AutomatedTestBase
 
 			final double n13 = Math.pow(n,1.0/3), n23 = Math.pow(n,2.0/3), alphan23 = alpha*Math.pow(n, 2.0/3);
 			final double logn = Math.log(n)/Math.log(2), clogn = c*Math.log(n)/Math.log(2);
-			LOG.info(String.format("\nn: %d\tk: %d\trho: %f\nc: %f\t alpha: %f\tt: %f\nclogn: %f\tn13: %f\talphan23: %f",
-					n, k, rho, c, alpha, t, clogn, n13, alphan23));
+			LOG.info(String.format("\nn: %d\tk: %d\trho: %f\nc: %f\t alpha: %f\tt: %f\nclogn: %f\tn13: %f\tn23: %f\talphan23: %f",
+					n, k, rho, c, alpha, t, clogn, n13, n23, alphan23));
 
-			final double[][] A = createInput(n, (int)(c*Math.log(n)/Math.log(2)), rho);
+			final double[][] A = createInput(n, (int)Math.round(clogn), rho);
 
 			writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
 			writeInputMatrixWithMTD("n", new double[][]{new double[] {n}}, true);

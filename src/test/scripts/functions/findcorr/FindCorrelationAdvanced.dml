@@ -2,25 +2,30 @@
 k = as.scalar(read($1))
 n = as.scalar(read($2))
 c = as.scalar(read($3))
+c = round(c*10)/10
 alpha = as.scalar(read($4))
 t = as.scalar(read($5))
 
-#n13 = as.integer(n^(1.0/3.0)+0.000001)
-#n23 = as.integer(n^(2.0/3.0)+0.000001)
-#alphan23 = as.integer(alpha*n^(2.0/3.0)+0.000001)
-#logn = as.integer(log(n,2))
-#clogn = as.integer(c*log(n,2))
-#print("n is "+n)
-#print("n13 is "+n13)
-#print("n23 is "+n23)
-#print("alphan23 is "+alphan23)
-#print("logn is "+logn)
-#print("clogn is "+clogn)
-n13 = as.scalar(read($8))
-n23 = as.scalar(read($9))
-alphan23 = as.scalar(read($10))
-logn = as.scalar(read($11))
-clogn = as.scalar(read($12))
+n13 = round(n^(1.0/3.0))
+n23 = round(n^(2.0/3.0))
+alphan23 = round(alpha*n^(2.0/3.0))
+logn = round(log(n,2))
+clogn = round(c*log(n,2))
+print("n is "+n)
+print("c is "+c)
+print("k is "+k)
+print("alpha is "+alpha)
+print("t is "+t)
+print("n13 is "+n13)
+print("n23 is "+n23)
+print("alphan23 is "+alphan23)
+print("logn is "+logn)
+print("clogn is "+clogn)
+#n13 = as.scalar(read($8))
+#n23 = as.scalar(read($9))
+#alphan23 = as.scalar(read($10))
+#logn = as.scalar(read($11))
+#clogn = as.scalar(read($12))
 
 # random matrix of -1 and 1
 # todo optimize to 0 and 1
@@ -82,13 +87,13 @@ while (!ok) {
     XR = X[g1,] # row vector
     g2 = as.scalar(rowIndexMax(XR)) # col index of max val
 
-    print("(g1,g2): " + g1 + ", " + g2)
 
     AG1 = A[, (g1-1)*n13+1 : g1*n13]
     AG2 = A[, (g2-1)*n13+1 : g2*n13]
     Y =  t(AG1)%*%AG2 - diag(diag(t(AG1)%*%AG2))
 
     Ymax = max(Y)
+    print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
     ok = Ymax >= t
 }
 
@@ -98,8 +103,8 @@ YR = Y[Y_rowidx,] # row vector
 Y_colidx = as.scalar(rowIndexMax(YR)) # col index of max val
 
 # add back to original group
-i = Y_rowidx + (g1-1)*n13
-j = Y_colidx + (g2-1)*n13
+i = round(Y_rowidx + (g1-1)*n13)
+j = round(Y_colidx + (g2-1)*n13)
 
 print("(Yi,Yj): " + Y_rowidx + ", " + Y_colidx)
 print("(i,j)  : " + i + ", " + j)
