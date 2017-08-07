@@ -104,8 +104,8 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			String HOME = SCRIPT_DIR + TEST_DIR;
 			fullDMLScriptName = HOME + testname + ".dml";
 			programArgs = new String[] { "-args", //"-stats", "-explain", "recompile_hops",
-					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"),
-					output("O"), input("n13"), input("n23"), input("alphan23"), input("logn"), input("clogn")}; //
+					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"), output("O")};
+					//input("n13"), input("n23"), input("alphan23"), input("logn"), input("clogn")}; //
 			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
 
@@ -119,7 +119,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			final double t = rho/4 * c * Math.log(n) / Math.log(2);
 
 			final double n13 = Math.pow(n,1.0/3), n23 = Math.pow(n,2.0/3), alphan23 = alpha*Math.pow(n, 2.0/3);
-			final double logn = Math.log(n)/Math.log(2), clogn = c*Math.log(n)/Math.log(2);
+			final double logn = Math.log(n)/Math.log(2), clogn = c*logn;
 			LOG.info(String.format("\nn: %d\tk: %d\trho: %f\nc: %f\t alpha: %f\tt: %f\nclogn: %f\tn13: %f\tn23: %f\talphan23: %f",
 					n, k, rho, c, alpha, t, clogn, n13, n23, alphan23));
 
@@ -132,11 +132,11 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
 			writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
 			writeInputMatrixWithMTD("A", A, true);
-			writeInputMatrixWithMTD("n13", new double[][]{new double[] {n13}}, true);
-			writeInputMatrixWithMTD("n23", new double[][]{new double[] {n23}}, true);
-			writeInputMatrixWithMTD("alphan23", new double[][]{new double[] {alphan23}}, true);
-			writeInputMatrixWithMTD("logn", new double[][]{new double[] {logn}}, true);
-			writeInputMatrixWithMTD("clogn", new double[][]{new double[] {clogn}}, true);
+//			writeInputMatrixWithMTD("n13", new double[][]{new double[] {n13}}, true);
+//			writeInputMatrixWithMTD("n23", new double[][]{new double[] {n23}}, true);
+//			writeInputMatrixWithMTD("alphan23", new double[][]{new double[] {alphan23}}, true);
+//			writeInputMatrixWithMTD("logn", new double[][]{new double[] {logn}}, true);
+//			writeInputMatrixWithMTD("clogn", new double[][]{new double[] {clogn}}, true);
 			LOG.info("Time to write inputs: "+(System.currentTimeMillis()-tWrite)/1000+"s");
 
 			//execute tests

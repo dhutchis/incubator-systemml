@@ -106,8 +106,6 @@ while (!ok) {
 
     Ymax = max(Y)
     print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
-    print("g1 range: " + ((g1-1)*n13+1) + " : " + (g1*n13))
-    print("g2 range: " + ((g2-1)*n13+1) + " : " + (g2*n13))
     ok = Ymax >= t
 }
 
