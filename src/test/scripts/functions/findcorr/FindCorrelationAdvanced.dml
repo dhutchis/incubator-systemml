@@ -4,7 +4,7 @@ n = as.scalar(read($2))
 c = as.scalar(read($3))
 c = round(c*10)/10
 alpha = as.scalar(read($4))
-t = as.scalar(read($5))
+t = round(as.scalar(read($5)))
 
 n13 = round(n^(1.0/3.0))
 n23 = round(n^(2.0/3.0))
@@ -42,10 +42,18 @@ for (i in 1:n23) {
 	S[(i-1)*n13+1:i*n13, i] = matrix(1, rows=n13, cols=1)
 }
 
+#time = externalFunction(Integer i) return (Double B)
+#       implemented in (classname="org.apache.sysml.udf.lib.TimeWrapper", exectype="mem");
+#ti = time(1)
+#ti = as.integer(ti)
+#print("Time: " + ti);
+
 ok = FALSE
 failCount = -1
 Y = matrix(0, rows=n13, cols=n13)
 sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
+g1 = 0
+g2 = 0
 while (!ok) {
     failCount = failCount + 1
 
@@ -53,6 +61,7 @@ while (!ok) {
     M = matrix(0, rows=alphan23, cols=clogn)
     for (i in 1:alphan23) { # todo: make parfor
         # Task: draw k '1's in a row vector of length log n
+        #see = ti + i + failCount*alphan23 # attempt at setting random seed, but this must be a constant for the sample function
         s = sample(range=clogn, size=k, replacement=FALSE) # seed? maybe set new every loop? returns k x 1 col vector
 
         # The following code is an alternative to the sample function.
@@ -76,7 +85,7 @@ while (!ok) {
     }
 
     # alphan23 x n
-    G = -(M %*% A) %% 4 + (k%%2) + 1
+    G = -( ((M %*% A) + 3*k) %% 4) +1
     # alphan23 x n23
     B = G %*% S
 
@@ -90,10 +99,15 @@ while (!ok) {
 
     AG1 = A[, (g1-1)*n13+1 : g1*n13]
     AG2 = A[, (g2-1)*n13+1 : g2*n13]
-    Y =  t(AG1)%*%AG2 - diag(diag(t(AG1)%*%AG2))
+    Y =  t(AG1)%*%AG2
+    if (g1 == g2) {
+        Y = Y - diag(diag(Y))
+    }
 
     Ymax = max(Y)
     print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
+    print("g1 range: " + ((g1-1)*n13+1) + " : " + (g1*n13))
+    print("g2 range: " + ((g2-1)*n13+1) + " : " + (g2*n13))
     ok = Ymax >= t
 }
 

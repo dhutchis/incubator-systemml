@@ -31,6 +31,7 @@ import org.apache.sysml.runtime.matrix.data.MatrixValue;
 import org.apache.sysml.test.integration.AutomatedTestBase;
 import org.apache.sysml.test.integration.TestConfiguration;
 import org.apache.sysml.test.utils.TestUtils;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -73,6 +74,14 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		testFindCorrelation(TEST_NAME2, ExecType.SPARK);
 	}
 
+	@Test
+	public void testMod() {
+		int y = 6 % 4;
+		Assert.assertEquals(2, y);
+
+		int x = (-3) % 4;
+		Assert.assertEquals(-3, x);
+	}
 
 	private void testFindCorrelation(String testname, ExecType et)
 	{	
@@ -102,12 +111,12 @@ public final class FindCorrelationTest extends AutomatedTestBase
 
 
 			// prefer n as a power of 2 that is divisible by 6
-			final int n = 1<<12;
-			final int k = 5; // log n / log log n
+			final int n = 1<<6;
+			final int k = 2; // log n / log log n
 			final double rho = 0.4;
-			final double c = 2 / (rho*rho);
-			final double alpha = 2 / rho;
-			final double t = rho/2 * c * Math.log(n) / Math.log(2);
+			final double c = 30 / (rho*rho);
+			final double alpha = 35 / rho;
+			final double t = rho/4 * c * Math.log(n) / Math.log(2);
 
 			final double n13 = Math.pow(n,1.0/3), n23 = Math.pow(n,2.0/3), alphan23 = alpha*Math.pow(n, 2.0/3);
 			final double logn = Math.log(n)/Math.log(2), clogn = c*Math.log(n)/Math.log(2);
@@ -116,6 +125,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 
 			final double[][] A = createInput(n, (int)Math.round(clogn), rho);
 
+			long tWrite = System.currentTimeMillis();
 			writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
 			writeInputMatrixWithMTD("n", new double[][]{new double[] {n}}, true);
 			writeInputMatrixWithMTD("c", new double[][]{new double[] {c}}, true);
@@ -127,6 +137,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			writeInputMatrixWithMTD("alphan23", new double[][]{new double[] {alphan23}}, true);
 			writeInputMatrixWithMTD("logn", new double[][]{new double[] {logn}}, true);
 			writeInputMatrixWithMTD("clogn", new double[][]{new double[] {clogn}}, true);
+			LOG.info("Time to write inputs: "+(System.currentTimeMillis()-tWrite)/1000+"s");
 
 			//execute tests
 			runTest(true, false, null, -1); 
@@ -158,6 +169,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 		}
 		LOG.info("Correlated pair: ("+(ci+1)+", "+(cj+1)+")");
 
+		long t1 = System.currentTimeMillis();
 		final double[][] A = new double[numObs][n]; //getRandomMatrix(nlog, n, 0, 1, 1.0, 7);
 		for (int i = 0; i < A.length; i++) {
 			A[i] = new double[n];
@@ -168,6 +180,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 					A[i][j] = random.nextBoolean() ? -1 : 1;
 			}
 		}
+		LOG.info("Time to generate A: "+(System.currentTimeMillis()-t1)/1000+"s");
 
 		return A;
 	}
