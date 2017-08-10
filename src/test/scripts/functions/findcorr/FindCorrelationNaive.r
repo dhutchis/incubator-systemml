@@ -5,15 +5,12 @@ options(digits=22)
 library(Matrix)
 library("matrixStats")
 
-k = as.numeric(readMM(paste(args[1], "k.mtx", sep="")))
-n = as.numeric(readMM(paste(args[1], "n.mtx", sep="")))
-
 # random matrix of -1 and 1
 # todo optimize to 0 and 1
 #AR = rand(rows=nlog, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
 #A = -1 * (AR <= 0.5) + (AR > 0.5)
 A = as.matrix(readMM(paste(args[1], "A.mtx", sep="")))
-
+n = ncol(A)
 
 ##########################################################
 ## Naive:

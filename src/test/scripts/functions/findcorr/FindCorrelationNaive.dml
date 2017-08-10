@@ -1,18 +1,21 @@
 
-k = as.scalar(read($1))
-n = as.scalar(read($2))
-c = as.scalar(read($3))
-alpha = as.scalar(read($4))
-t = as.scalar(read($5))
+A = read($A)    # clogn x n
+clogn = nrow(A)
+n = ncol(A)
+print("A is "+clogn+" by "+n)
+
+# How many observations to use? Default all observations.
+clogn = ifdef($clogn_reduce, clogn)
+A = A[1:clogn,]
+
+print("clogn is "+clogn)
+print("n is "+n)
 
 # random matrix of -1 and 1
 # todo optimize to 0 and 1
 #AR = rand(rows=clogn, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
 #A = -1 * (AR <= 0.5) + (AR > 0.5)
-A = read($6)    # clogn x n
-Ar = nrow(A)
-Ac = ncol(A)
-print("A is "+Ar+" by "+Ac)
+
 
 ##########################################################
 ## Naive:
@@ -29,4 +32,4 @@ j = as.matrix(X_colidx)
 Z = cbind(i, j)
 
 print("(i,j): " + X_rowidx + ", " + X_colidx)
-write(Z, $7);
+write(Z, $O);

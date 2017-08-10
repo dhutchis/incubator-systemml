@@ -1,26 +1,38 @@
+# Input matrix
+A = read($A)    # clogn x n
+clogn = nrow(A)
+n = ncol(A)
+print("A is "+clogn+" by "+n)
 
-k = as.scalar(read($1))
-n = as.scalar(read($2))
-c = as.scalar(read($3))
-c = round(c*10)/10
-alpha = as.scalar(read($4))
-t = round(as.scalar(read($5)))
+# Controls number of variables sampled per sample of the observations.
+k = as.scalar(read($k))
+# Controls number of samples of the observations.
+alpha = as.scalar(read($alpha))
+# Threshold for deciding whether we found a correlated variable.
+t = round(as.scalar(read($t)))
+
+# How many observations to use? Default all observations.
+clogn = ifdef($clogn_reduce, clogn)
+A = A[1:clogn,]
+
+#c = as.scalar(read($3))
+#c = round(c*10)/10
+#n = as.scalar(read($2))
 
 n13 = round(n^(1.0/3.0))
 n23 = round(n^(2.0/3.0))
 alphan23 = round(alpha*n^(2.0/3.0))
-logn = round(log(n,2))
-clogn = round(c*log(n,2))
+#logn = round(log(n,2))
+#clogn = round(c*log(n,2))
+print("clogn is "+clogn)
 print("n is "+n)
-print("c is "+c)
 print("k is "+k)
 print("alpha is "+alpha)
 print("t is "+t)
 print("n13 is "+n13)
 print("n23 is "+n23)
 print("alphan23 is "+alphan23)
-print("logn is "+logn)
-print("clogn is "+clogn)
+#print("logn is "+logn)
 #n13 = as.scalar(read($8))
 #n23 = as.scalar(read($9))
 #alphan23 = as.scalar(read($10))
@@ -31,10 +43,7 @@ print("clogn is "+clogn)
 # todo optimize to 0 and 1
 #AR = rand(rows=clogn, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
 #A = -1 * (AR <= 0.5) + (AR > 0.5)
-A = read($6)    # clogn x n
-Ar = nrow(A)
-Ac = ncol(A)
-print("A is "+Ar+" by "+Ac)
+
 
 # Create S of size n x n23
 S = matrix(0, rows=n, cols=n23)
@@ -124,4 +133,4 @@ i = as.matrix(i)
 j = as.matrix(j)
 Z = cbind(i, j)
 print("failCount: "+failCount)
-write(Z, $7);
+write(Z, $O);

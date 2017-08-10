@@ -40,8 +40,8 @@ import org.junit.Test;
 public final class FindCorrelationTest extends AutomatedTestBase
 {
 	private static final Log LOG = LogFactory.getLog(FindCorrelationTest.class.getName());
-	private static final String TEST_NAME1 = "FindCorrelationNaive";
-	private static final String TEST_NAME2 = "FindCorrelationAdvanced";
+	private static final String TEST_NAME_NAIVE = "FindCorrelationNaive";
+	private static final String TEST_NAME_ADVANCED = "FindCorrelationAdvanced";
 	private static final String TEST_DIR = "functions/findcorr/";
 	private static final String TEST_CLASS_DIR = TEST_DIR + FindCorrelationTest.class.getSimpleName() + "/";
 	
@@ -50,29 +50,29 @@ public final class FindCorrelationTest extends AutomatedTestBase
 	@Override
 	public void setUp() {
 		TestUtils.clearAssertionInformation();
-		addTestConfiguration( TEST_NAME1, new TestConfiguration(TEST_CLASS_DIR, TEST_NAME1, new String[] { "O" }) );
-		addTestConfiguration( TEST_NAME2, new TestConfiguration(TEST_CLASS_DIR, TEST_NAME2, new String[] { "O" }) );
+		addTestConfiguration(TEST_NAME_NAIVE, new TestConfiguration(TEST_CLASS_DIR, TEST_NAME_NAIVE, new String[] { "O" }) );
+		addTestConfiguration(TEST_NAME_ADVANCED, new TestConfiguration(TEST_CLASS_DIR, TEST_NAME_ADVANCED, new String[] { "O" }) );
 	}
 	
 	@Test
 	public void testFindCorrelationCPNaive() {
-		testFindCorrelation(TEST_NAME1, ExecType.CP);
+		testFindCorrelation(TEST_NAME_NAIVE, ExecType.CP);
 	}
 
-	@Test
-	public void testFindCorrelationSPNaive() {
-		testFindCorrelation(TEST_NAME1, ExecType.SPARK);
-	}
+//	@Test
+//	public void testFindCorrelationSPNaive() {
+//		testFindCorrelation(TEST_NAME_NAIVE, ExecType.SPARK);
+//	}
 
 	@Test
 	public void testFindCorrelationCPAdvanced() {
-		testFindCorrelation(TEST_NAME2, ExecType.CP);
+		testFindCorrelation(TEST_NAME_ADVANCED, ExecType.CP);
 	}
 
-	@Test
-	public void testFindCorrelationSPAdvanced() {
-		testFindCorrelation(TEST_NAME2, ExecType.SPARK);
-	}
+//	@Test
+//	public void testFindCorrelationSPAdvanced() {
+//		testFindCorrelation(TEST_NAME_ADVANCED, ExecType.SPARK);
+//	}
 
 	@Test
 	public void testMod() {
@@ -102,13 +102,9 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			loadTestConfiguration(config);
 			
 			String HOME = SCRIPT_DIR + TEST_DIR;
-			fullDMLScriptName = HOME + testname + ".dml";
-			programArgs = new String[] { "-args", //"-stats", "-explain", "recompile_hops",
-					input("k"), input("n"), input("c"), input("alpha"), input("t"), input("A"), output("O")};
-					//input("n13"), input("n23"), input("alphan23"), input("logn"), input("clogn")}; //
 			fullRScriptName = HOME + testname + ".R";
 			rCmd = getRCmd(inputDir(), expectedDir());
-
+			fullDMLScriptName = HOME + testname + ".dml";
 
 			// prefer n as a power of 2 that is divisible by 6
 			final int n = 1<<6;
@@ -126,12 +122,24 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			final double[][] A = createInput(n, (int)Math.round(clogn), rho);
 
 			long tWrite = System.currentTimeMillis();
-			writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
-			writeInputMatrixWithMTD("n", new double[][]{new double[] {n}}, true);
-			writeInputMatrixWithMTD("c", new double[][]{new double[] {c}}, true);
-			writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
-			writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
 			writeInputMatrixWithMTD("A", A, true);
+
+			switch (testname) {
+			case TEST_NAME_NAIVE:
+				programArgs = new String[] { //"-stats", "-explain", "recompile_hops",
+						"-nvargs", inputNamed("A"), outputNamed("O")}; // "clogn_reduce=1000"
+				break;
+			case TEST_NAME_ADVANCED:
+				programArgs = new String[] { //"-stats", "-explain", "recompile_hops",
+						"-nvargs", inputNamed("A"), outputNamed("O"), inputNamed("k"), inputNamed("alpha"), inputNamed("t")};
+				writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
+				writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
+				writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
+				break; //input("n13"), input("n23"), input("alphan23"), input("logn"), input("clogn")}; //
+			default:
+				throw new AssertionError("unexpected test name: "+testname);
+			}
+
 //			writeInputMatrixWithMTD("n13", new double[][]{new double[] {n13}}, true);
 //			writeInputMatrixWithMTD("n23", new double[][]{new double[] {n23}}, true);
 //			writeInputMatrixWithMTD("alphan23", new double[][]{new double[] {alphan23}}, true);

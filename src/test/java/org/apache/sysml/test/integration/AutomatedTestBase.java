@@ -1659,6 +1659,9 @@ public abstract class AutomatedTestBase
 	protected String input(String input) {
 		return baseDirectory + INPUT_DIR + input;
 	}
+	protected String inputNamed(String input) {
+		return input+"="+baseDirectory + INPUT_DIR + input;
+	}
 
 	protected String inputDir() {
 		return baseDirectory + INPUT_DIR;
@@ -1666,6 +1669,10 @@ public abstract class AutomatedTestBase
 
 	protected String output(String output) {
 		return baseDirectory + OUTPUT_DIR + output;
+	}
+
+	protected String outputNamed(String output) {
+		return output+"="+baseDirectory + OUTPUT_DIR + output;
 	}
 
 	protected String outputDir() {
@@ -1798,7 +1805,7 @@ public abstract class AutomatedTestBase
 	 *
 	 * @param name
 	 *            directory name
-	 * @param matrix
+	 * @param data
 	 *            two dimensional frame data
 	 * @param schema
 	 * @param oi
