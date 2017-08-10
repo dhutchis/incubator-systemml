@@ -1,0 +1,26 @@
+
+clogn = read($clogn)
+n = read($n)
+print("Generating A: "+clogn+" by "+n)
+rho = read($rho)
+print("rho is "+rho)
+prob = 0.5 + rho/2
+
+# random matrix of -1 and 1
+# todo optimize to 0 and 1
+AR = rand(rows=clogn, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
+A = (AR <= 0.5) - (AR > 0.5)
+s = sample(range=n, size=2, replacement=FALSE) # 2 x 1 vector
+i = min(s)
+j = max(s)
+
+# flip a prob-weighted coin. If heads, agree with A[,i]. If tails, disagree.
+cv = rand(rows=clogn, cols=1, min=0, max=1, ped="uniform", sparsity=1.0)
+cv = (cv <= prob) - (cv > prob)
+A[,j] = A[,i] * cv
+
+print("(i,j): " + i + ", " + j)
+i = as.matrix(i)
+j = as.matrix(j)
+ij = cbind(i,j)
+write(ij, $ij);

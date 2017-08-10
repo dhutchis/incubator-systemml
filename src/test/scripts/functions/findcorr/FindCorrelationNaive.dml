@@ -11,12 +11,6 @@ A = A[1:clogn,]
 print("clogn is "+clogn)
 print("n is "+n)
 
-# random matrix of -1 and 1
-# todo optimize to 0 and 1
-#AR = rand(rows=clogn, cols=n, min=0, max=1, pdf="uniform", sparsity=1.0)
-#A = -1 * (AR <= 0.5) + (AR > 0.5)
-
-
 ##########################################################
 ## Naive:
 X =  t(A)%*%A - diag(diag(t(A)%*%A))
