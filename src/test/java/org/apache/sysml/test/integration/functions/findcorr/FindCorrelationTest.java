@@ -19,6 +19,7 @@
 
 package org.apache.sysml.test.integration.functions.findcorr;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Random;
 
@@ -42,9 +43,15 @@ public final class FindCorrelationTest extends AutomatedTestBase
 	private static final Log LOG = LogFactory.getLog(FindCorrelationTest.class.getName());
 	private static final String TEST_NAME_NAIVE = "FindCorrelationNaive";
 	private static final String TEST_NAME_ADVANCED = "FindCorrelationAdvanced";
-	private static final String TEST_DIR = "functions/findcorr/";
+	private static final String TEST_DIR = "../../../scripts/perftest/findCorrelation/";
 	private static final String TEST_CLASS_DIR = TEST_DIR + FindCorrelationTest.class.getSimpleName() + "/";
-	
+
+	@Override
+	protected File getConfigTemplateFile() {
+		System.out.println(new File(".").getAbsolutePath());
+		return new File("scripts/perftest/findCorrelation/", "SystemML-config.xml");
+	}
+
 	private static final double eps = Math.pow(10, -10);
 	
 	@Override
@@ -126,11 +133,11 @@ public final class FindCorrelationTest extends AutomatedTestBase
 
 			switch (testname) {
 			case TEST_NAME_NAIVE:
-				programArgs = new String[] { //"-stats", "-explain", "recompile_hops",
+				programArgs = new String[] { "-stats", "-explain", "hops", //"-stats", "-explain", "recompile_hops",
 						"-nvargs", inputNamed("A"), outputNamed("O")}; // "clogn_reduce=1000"
 				break;
 			case TEST_NAME_ADVANCED:
-				programArgs = new String[] { //"-stats", "-explain", "recompile_hops",
+				programArgs = new String[] { "-stats", "-explain", "hops",
 						"-nvargs", inputNamed("A"), outputNamed("O"), inputNamed("k"), inputNamed("alpha"), inputNamed("t")};
 				writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
 				writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
