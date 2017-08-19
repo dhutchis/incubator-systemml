@@ -24,3 +24,4 @@ i = as.matrix(i)
 j = as.matrix(j)
 ij = cbind(i,j)
 write(ij, $ij);
+write(A, $A)

@@ -118,8 +118,10 @@ YR = Y[Y_rowidx,] # row vector
 Y_colidx = as.scalar(rowIndexMax(YR)) # col index of max val
 
 # add back to original group
-i = round(Y_rowidx + (g1-1)*n13)
-j = round(Y_colidx + (g2-1)*n13)
+i0 = round(Y_rowidx + (g1-1)*n13)
+j0 = round(Y_colidx + (g2-1)*n13)
+i = min(i0,j0)
+j = max(i0,j0)
 
 print("(Yi,Yj): " + Y_rowidx + ", " + Y_colidx)
 print("(i,j)  : " + i + ", " + j)
