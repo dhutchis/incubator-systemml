@@ -1,4 +1,4 @@
-
+format=ifdef($format, "binary")
 clogn = $clogn
 n = $n
 print("Generating A: "+clogn+" by "+n)
@@ -24,4 +24,4 @@ i = as.matrix(i)
 j = as.matrix(j)
 ij = cbind(i,j)
 write(ij, $ij);
-write(A, $A)
+write(A, $A, format=format)

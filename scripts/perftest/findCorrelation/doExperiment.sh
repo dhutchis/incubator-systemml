@@ -7,8 +7,8 @@ set -o nounset
 printUsageExit()
 {
   cat <<EOF
-Usage: $0 <hdfsDataDir> <MR | SPARK | ECHO> times_filename clogn n rho k alpha t [clogn_reduce_naive] [clogn_reduce_advanced]
-ex:    $0 data MR times.csv 18750 64 0.4 1 62.5 1875 18000 18700
+Usage: $0 <hdfsDataDir> <MR | SPARK | ECHO> times_filename clogn n rho k alpha t [<binary | text>] [clogn_reduce_naive] [clogn_reduce_advanced]
+ex:    $0 data MR times.csv 18750 64 0.4 1 62.5 1875 binary 18000 18700
 EOF
   exit 1
 }
@@ -32,22 +32,26 @@ rho="$6"
 k="$7"
 alpha="$8"
 t="$9"
-clogn_reduce_naive="${10:-}"
-clogn_reduce_advanced="${11:-}"
+format="${10:-binary}"
+clogn_reduce_naive="${11:-}"
+clogn_reduce_advanced="${12:-}"
 
 #hdfs dfs -ls /user/biuser/data
-#hdfs dfs -ls /user/biuser/data/ij_18750_64
-#cmp <(hdfs dfs -ls /user/biuser/data/ij_18750_64) <(hdfs dfs -ls /user/biuser/data/O_18750_64}
-fA="$1/A_${clogn}_${n}"
+#hdfs dfs -rm /user/biuser/data/*; rm times.csv
+#hdfs dfs -ls /user/biuser/data/ij_18750_64_binary
+#cmp <(hdfs dfs -cat /user/biuser/data/ij_18750_64) <(hdfs dfs -cat /user/biuser/data/naive_18750_64); echo $?
+fA="$1/A_${clogn}_${n}_${format}"
 fij="$1/ij_${clogn}_${n}"
 fO1="$1/naive_${clogn}_${n}"
 fO2="$1/advanced_${clogn}_${n}"
 
+
 if ! hdfs dfs -test -f "${fA}" || ! hdfs dfs -test -f "${fA}.mtd"; then
 tstart=$SECONDS
-${CMD} jar SystemML.jar -f ${fDatagen} -nvargs A=${fA} ij=${fij} n=${n} clogn=${clogn} rho=${rho}
+${CMD} jar SystemML.jar -f ${fDatagen} -nvargs A=${fA} ij=${fij} n=${n} clogn=${clogn} rho=${rho} format=${format}
 echo "datagen,${clogn},${n},${rho},$(($SECONDS - $tstart - 3))" >> ${fTimes}
 fi
+
 
 tstart=$SECONDS
 if [ "$clogn_reduce_naive" = "" ]; then
@@ -68,6 +72,7 @@ else
   hdfs dfs -cat "${fO1}"
   echo "naive,${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))" >> ${fTimesFail}
 fi
+
 
 tstart=$SECONDS
 if [ "$clogn_reduce_advanced" = "" ]; then
