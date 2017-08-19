@@ -116,7 +116,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			// prefer n as a power of 2 that is divisible by 6
 			final int n = 1<<6;
 			final int k = 1; // log n / log log n
-			final double rho = 0.8;
+			final double rho = 0.4;
 			final double c = 500 / (rho*rho);
 			final double alpha = 25 / rho;
 			final double t = rho/4 * c * Math.log(n) / Math.log(2);
@@ -138,10 +138,10 @@ public final class FindCorrelationTest extends AutomatedTestBase
 				break;
 			case TEST_NAME_ADVANCED:
 				programArgs = new String[] { "-stats", //"-explain", "hops",
-						"-nvargs", inputNamed("A"), outputNamed("O"), inputNamed("k"), inputNamed("alpha"), inputNamed("t")};
-				writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
-				writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
-				writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
+						"-nvargs", inputNamed("A"), outputNamed("O"), "k="+k, "alpha="+alpha, "t="+t};
+//				writeInputMatrixWithMTD("k", new double[][]{new double[] {k}}, true);
+//				writeInputMatrixWithMTD("alpha", new double[][]{new double[] {alpha}}, true);
+//				writeInputMatrixWithMTD("t", new double[][]{new double[] {t}}, true);
 				break; //input("n13"), input("n23"), input("alphan23"), input("logn"), input("clogn")}; //
 			default:
 				throw new AssertionError("unexpected test name: "+testname);

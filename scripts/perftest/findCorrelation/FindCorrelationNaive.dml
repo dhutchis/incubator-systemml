@@ -22,9 +22,8 @@ X_colidx = as.scalar(rowIndexMax(XR)) # col index of max val
 ##########################################################
 i = min(X_rowidx, X_colidx)
 j = max(X_rowidx, X_colidx)
+print("(i,j): " + i + ", " + j)
 i = as.matrix(i)
 j = as.matrix(j)
 Z = cbind(i, j)
-
-print("(i,j): " + i + ", " + j)
 write(Z, $O);

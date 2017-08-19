@@ -5,11 +5,11 @@ n = ncol(A)
 print("A is "+clogn+" by "+n)
 
 # Controls number of variables sampled per sample of the observations.
-k = as.scalar(read($k))
+k = $k
 # Controls number of samples of the observations.
-alpha = as.scalar(read($alpha))
+alpha = $alpha
 # Threshold for deciding whether we found a correlated variable.
-t = round(as.scalar(read($t)))
+t = round($t)
 
 # How many observations to use? Default all observations.
 clogn = ifdef($clogn_reduce, clogn)
@@ -33,11 +33,6 @@ print("n13 is "+n13)
 print("n23 is "+n23)
 print("alphan23 is "+alphan23)
 #print("logn is "+logn)
-#n13 = as.scalar(read($8))
-#n23 = as.scalar(read($9))
-#alphan23 = as.scalar(read($10))
-#logn = as.scalar(read($11))
-#clogn = as.scalar(read($12))
 
 # Create S of size n x n23
 S = matrix(0, rows=n, cols=n23)
