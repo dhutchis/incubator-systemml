@@ -42,7 +42,7 @@ public final class FindCorrelationTest extends AutomatedTestBase
 {
 	private static final Log LOG = LogFactory.getLog(FindCorrelationTest.class.getName());
 	private static final String TEST_NAME_NAIVE = "FindCorrelationNaive";
-	private static final String TEST_NAME_ADVANCED = "FindCorrelationAdvanced";
+	private static final String TEST_NAME_ADVANCED = "FindCorrelationAdvanced2";
 	private static final String TEST_DIR = "../../../scripts/perftest/findCorrelation/";
 	private static final String TEST_CLASS_DIR = TEST_DIR + FindCorrelationTest.class.getSimpleName() + "/";
 
@@ -114,11 +114,11 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			fullDMLScriptName = HOME + testname + ".dml";
 
 			// prefer n as a power of 2 that is divisible by 6
-			final int n = 1<<6;
+			final int n = 1<<12;
 			final int k = 1; // log n / log log n
-			final double rho = 0.4;
-			final double c = 500 / (rho*rho);
-			final double alpha = 25 / rho;
+			final double rho = 0.8;
+			final double c = 800 / (rho*rho);
+			final double alpha = 50 / rho;
 			final double t = rho/4 * c * Math.log(n) / Math.log(2);
 
 			final double n13 = Math.pow(n,1.0/3), n23 = Math.pow(n,2.0/3), alphan23 = alpha*Math.pow(n, 2.0/3);

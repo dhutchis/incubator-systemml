@@ -1,0 +1,124 @@
+# Input matrix
+A = read($A)    # clogn x n
+clogn = nrow(A)
+n = ncol(A)
+print("A is "+clogn+" by "+n)
+
+# Controls number of variables sampled per sample of the observations.
+k = $k
+# Controls number of samples of the observations.
+alpha = $alpha
+# Threshold for deciding whether we found a correlated variable.
+t = round($t)
+
+# How many observations to use? Default all observations.
+clogn = ifdef($clogn_reduce, clogn)
+A = A[1:clogn,]
+
+#c = as.scalar(read($3))
+#c = round(c*10)/10
+#n = as.scalar(read($2))
+
+n13 = round(n^(1.0/3.0))
+n23 = round(n^(2.0/3.0))
+alphan23 = round(alpha*n^(2.0/3.0))
+#logn = round(log(n,2))
+#clogn = round(c*log(n,2))
+print("clogn is "+clogn)
+print("n is "+n)
+print("k is "+k)
+print("alpha is "+alpha)
+print("t is "+t)
+print("n13 is "+n13)
+print("n23 is "+n23)
+print("alphan23 is "+alphan23)
+#print("logn is "+logn)
+
+# Create S of size n x n23
+S = matrix(0, rows=n, cols=n23)
+for (i in 1:n23) {
+	tmp = rand(rows=n13, cols=1, min=0, max=1, pdf="uniform", sparsity=1.0)
+  S[(i-1)*n13+1:i*n13, i] = (tmp <= 0.5) - (tmp > 0.5)
+}
+
+#time = externalFunction(Integer i) return (Double B)
+#       implemented in (classname="org.apache.sysml.udf.lib.TimeWrapper", exectype="mem");
+#ti = time(1)
+#ti = as.integer(ti)
+#print("Time: " + ti);
+
+ok = FALSE
+failCount = -1
+Y = matrix(0, rows=n13, cols=n13)
+sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
+g1 = 0
+g2 = 0
+while (!ok) {
+    failCount = failCount + 1
+
+
+    #c log n * n^{2/3}
+    G = A %*% S
+
+    #n^{2/3} * n^{2/3}
+    B = t(G) %*% G
+
+
+    #(g1,g2) = maxIndex( t(B)%*%B - diag(diag(t(B)%*%B)) )
+    X =  B - diag(diag(B))
+    X_rowmax = rowMaxs(X) # col vector of max val in each row
+    g1 = as.scalar(rowIndexMax(t(X_rowmax))) # row index of max val
+    XR = X[g1,] # row vector
+    g2 = as.scalar(rowIndexMax(XR)) # col index of max val
+
+
+    AG1 = A[, (g1-1)*n13+1 : g1*n13]
+    AG2 = A[, (g2-1)*n13+1 : g2*n13]
+    Y =  t(AG1)%*%AG2
+    if (g1 == g2) {
+        Y = Y - diag(diag(Y))
+    }
+
+    Ymax = max(Y)
+    print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
+    ok = Ymax >= t
+
+    if (!ok) {
+          X_rowmin = rowMins(X) # col vector of max val in each row
+          g1 = as.scalar(rowIndexMin(t(X_rowmin))) # row index of max val
+          XR = X[g1,] # row vector
+          g2 = as.scalar(rowIndexMin(XR)) # col index of max val
+
+
+          AG1 = A[, (g1-1)*n13+1 : g1*n13]
+          AG2 = A[, (g2-1)*n13+1 : g2*n13]
+          Y =  t(AG1)%*%AG2
+          if (g1 == g2) {
+              Y = Y - diag(diag(Y))
+          }
+
+          Ymax = max(Y)
+          print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
+          ok = Ymax >= t
+    }
+
+}
+
+Y_rowmax = rowMaxs(Y) # col vector of max val in each row
+Y_rowidx = as.scalar(rowIndexMax(t(Y_rowmax))) # row index of max val
+YR = Y[Y_rowidx,] # row vector
+Y_colidx = as.scalar(rowIndexMax(YR)) # col index of max val
+
+# add back to original group
+i0 = round(Y_rowidx + (g1-1)*n13)
+j0 = round(Y_colidx + (g2-1)*n13)
+i = min(i0,j0)
+j = max(i0,j0)
+
+print("(Yi,Yj): " + Y_rowidx + ", " + Y_colidx)
+print("(i,j)  : " + i + ", " + j)
+i = as.matrix(i)
+j = as.matrix(j)
+Z = cbind(i, j)
+print("failCount: "+failCount)
+write(Z, $O);

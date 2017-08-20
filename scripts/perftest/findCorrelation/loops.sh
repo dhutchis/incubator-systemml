@@ -7,6 +7,8 @@ set -o nounset
 #ex:    $0 data MR times.csv 18750 64 0.4 1 62.5 1875 binary 18000 18700
 
 stringContain() { [ -z "${2##*$1*}" ] && [ -z "$1" -o -n "$2" ]; }
+# 3125.5300000000 ==> 3125.53
+# 3125.0000000000 ==> 3125
 stripDecimalZeros() {
   a=${1:-$(</dev/stdin)};
   if stringContain "." "${a}"; then
@@ -23,11 +25,11 @@ stripDecimalZeros() {
 
 format="binary"
 k=1
-rho=0.4
-c=$(echo "500.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
-alpha=$(echo "25.0 / ${rho}" | bc -l | stripDecimalZeros)
+rho=0.8
+c=$(echo "60.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+alpha=$(echo "2.0 / ${rho}" | bc -l | stripDecimalZeros)
 
-for n in 64; do
+for n in 4096; do
   clogn=$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
   t=$(echo "${rho} / 4 * ${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
   #clogn_reduce_naive="$clogn"
