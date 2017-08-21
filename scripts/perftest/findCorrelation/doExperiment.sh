@@ -23,7 +23,7 @@ if [ "$2" = "SPARK" ]; then CMD="./sparkDML.sh "; DASH="-"; elif [ "$2" = "MR" ]
 
 fDatagen="FindCorrelationDatagen.dml"
 fNaive="FindCorrelationNaive.dml"
-fAdv="FindCorrelationAdvanced.dml"
+fAdv="FindCorrelationAdvanced2.dml"
 fTimes="$3"
 fTimesFail="FAIL_$3"
 clogn="$4"
@@ -48,16 +48,16 @@ fO2="$1/advanced_${clogn}_${n}"
 
 if ! hdfs dfs -test -f "${fA}" || ! hdfs dfs -test -f "${fA}.mtd"; then
 tstart=$SECONDS
-${CMD} jar SystemML.jar -f ${fDatagen} -nvargs A=${fA} ij=${fij} n=${n} clogn=${clogn} rho=${rho} format=${format}
+${CMD} -f ${fDatagen} -nvargs A=${fA} ij=${fij} n=${n} clogn=${clogn} rho=${rho} format=${format}
 echo "datagen,${clogn},${n},${rho},$(($SECONDS - $tstart - 3))" >> ${fTimes}
 fi
 
 
 tstart=$SECONDS
 if [ "$clogn_reduce_naive" = "" ]; then
-  ${CMD} jar SystemML.jar -f ${fNaive} -nvargs A=${fA} O=${fO1}
+  ${CMD} -f ${fNaive} -nvargs A=${fA} O=${fO1}
 else
-  ${CMD} jar SystemML.jar -f ${fNaive} -nvargs A=${fA} O=${fO1} clogn_reduce=${clogn_reduce_naive}
+  ${CMD} -f ${fNaive} -nvargs A=${fA} O=${fO1} clogn_reduce=${clogn_reduce_naive}
 fi
 tend=$SECONDS
 #echo "cmp <(hdfs dfs -cat ${fij}) <(hdfs dfs -cat ${fO1})"
@@ -76,9 +76,9 @@ fi
 
 tstart=$SECONDS
 if [ "$clogn_reduce_advanced" = "" ]; then
-  ${CMD} jar SystemML.jar -f ${fAdv} -nvargs A=${fA} O=${fO2} k=${k} alpha=${alpha} t=${t}
+  ${CMD} -f ${fAdv} -nvargs A=${fA} O=${fO2} k=${k} alpha=${alpha} t=${t}
 else
-  ${CMD} jar SystemML.jar -f ${fAdv} -nvargs A=${fA} O=${fO2} k=${k} alpha=${alpha} t=${t} clogn_reduce=${clogn_reduce_advanced}
+  ${CMD} -f ${fAdv} -nvargs A=${fA} O=${fO2} k=${k} alpha=${alpha} t=${t} clogn_reduce=${clogn_reduce_advanced}
 fi
 tend=$SECONDS
 if cmp --silent <(hdfs dfs -cat "${fij}") <(hdfs dfs -cat "${fO2}"); then

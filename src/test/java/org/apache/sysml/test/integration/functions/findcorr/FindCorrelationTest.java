@@ -117,9 +117,9 @@ public final class FindCorrelationTest extends AutomatedTestBase
 			final int n = 1<<12;
 			final int k = 1; // log n / log log n
 			final double rho = 0.8;
-			final double c = 800 / (rho*rho);
+			final double c = 100 / (rho*rho);
 			final double alpha = 50 / rho;
-			final double t = rho/4 * c * Math.log(n) / Math.log(2);
+			final double t = rho/1.5 * c * Math.log(n) / Math.log(2);
 
 			final double n13 = Math.pow(n,1.0/3), n23 = Math.pow(n,2.0/3), alphan23 = alpha*Math.pow(n, 2.0/3);
 			final double logn = Math.log(n)/Math.log(2), clogn = c*logn;

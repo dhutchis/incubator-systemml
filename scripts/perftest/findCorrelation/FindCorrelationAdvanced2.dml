@@ -34,13 +34,6 @@ print("n23 is "+n23)
 print("alphan23 is "+alphan23)
 #print("logn is "+logn)
 
-# Create S of size n x n23
-S = matrix(0, rows=n, cols=n23)
-for (i in 1:n23) {
-	tmp = rand(rows=n13, cols=1, min=0, max=1, pdf="uniform", sparsity=1.0)
-  S[(i-1)*n13+1:i*n13, i] = (tmp <= 0.5) - (tmp > 0.5)
-}
-
 #time = externalFunction(Integer i) return (Double B)
 #       implemented in (classname="org.apache.sysml.udf.lib.TimeWrapper", exectype="mem");
 #ti = time(1)
@@ -53,56 +46,59 @@ Y = matrix(0, rows=n13, cols=n13)
 sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
 g1 = 0
 g2 = 0
+C = matrix(0, rows=n23, cols=n23)
+
 while (!ok) {
     failCount = failCount + 1
 
+    # Create S of size n x n23
+    S = matrix(0, rows=n, cols=n23)
+    for (i in 1:n23) {
+    	tmp = rand(rows=n13, cols=1, min=0, max=1, pdf="uniform", sparsity=1.0)
+      S[(i-1)*n13+1:i*n13, i] = (tmp <= 0.5) - (tmp > 0.5)
+    }
 
     #c log n * n^{2/3}
     G = A %*% S
 
     #n^{2/3} * n^{2/3}
-    B = t(G) %*% G
+    B = abs(t(G) %*% G)
+    # todo: optimize matrix multiply that is symmetric: only need upper triangle
 
 
     #(g1,g2) = maxIndex( t(B)%*%B - diag(diag(t(B)%*%B)) )
     X =  B - diag(diag(B))
-    X_rowmax = rowMaxs(X) # col vector of max val in each row
-    g1 = as.scalar(rowIndexMax(t(X_rowmax))) # row index of max val
-    XR = X[g1,] # row vector
-    g2 = as.scalar(rowIndexMax(XR)) # col index of max val
+    C = C + (X >= t)
 
-
-    AG1 = A[, (g1-1)*n13+1 : g1*n13]
-    AG2 = A[, (g2-1)*n13+1 : g2*n13]
-    Y =  t(AG1)%*%AG2
-    if (g1 == g2) {
-        Y = Y - diag(diag(Y))
-    }
-
-    Ymax = max(Y)
-    print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
-    ok = Ymax >= t
-
-    if (!ok) {
-          X_rowmin = rowMins(X) # col vector of max val in each row
-          g1 = as.scalar(rowIndexMin(t(X_rowmin))) # row index of max val
-          XR = X[g1,] # row vector
-          g2 = as.scalar(rowIndexMin(XR)) # col index of max val
-
-
-          AG1 = A[, (g1-1)*n13+1 : g1*n13]
-          AG2 = A[, (g2-1)*n13+1 : g2*n13]
-          Y =  t(AG1)%*%AG2
-          if (g1 == g2) {
-              Y = Y - diag(diag(Y))
-          }
-
-          Ymax = max(Y)
-          print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
-          ok = Ymax >= t
-    }
-
+    Cmax = max(C)
+    cnt = sum(C == Cmax)
+    cnt2 = sum(C == Cmax-1)
+    #cnt3 = sum(C == Cmax-2)
+    ok = (cnt+cnt2) == 2
 }
+while( Cmax >= 1 ) {
+  cnt = sum(C == Cmax)
+  print("num equal to "+Cmax+" is "+cnt)
+  Cmax = Cmax - 1
+}
+C_rowmax = rowMaxs(C) # col vector of max val in each row
+g1 = as.scalar(rowIndexMax(t(C_rowmax))) # row index of max val
+CR = C[g1,] # row vector
+g2 = as.scalar(rowIndexMax(CR)) # col index of max val
+
+AG1 = A[, (g1-1)*n13+1 : g1*n13]
+AG2 = A[, (g2-1)*n13+1 : g2*n13]
+Y =  t(AG1)%*%AG2
+if (g1 == g2) {
+    Y = Y - diag(diag(Y))
+}
+
+# todo: if a C entry is bad, blacklist it by setting it to -99999
+# todo: try C entries at max-1 and max-2
+
+Ymax = max(Y)
+print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)
+#ok = Ymax >= t
 
 Y_rowmax = rowMaxs(Y) # col vector of max val in each row
 Y_rowidx = as.scalar(rowIndexMax(t(Y_rowmax))) # row index of max val

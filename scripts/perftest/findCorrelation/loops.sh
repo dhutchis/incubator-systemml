@@ -25,18 +25,20 @@ stripDecimalZeros() {
 
 format="binary"
 k=1
-rho=0.8
-c=$(echo "60.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+rho=0.4
+c=$(echo "250.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+c_naive=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+
 alpha=$(echo "2.0 / ${rho}" | bc -l | stripDecimalZeros)
 
-for n in 4096; do
+for n in 262144; do
   clogn=$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
-  t=$(echo "${rho} / 4 * ${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
-  #clogn_reduce_naive="$clogn"
+  t=$(echo "${rho} / 1.5 * ${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
+  clogn_reduce_naive=$(echo "${c_naive} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
   #clogn_reduce_advanced="$clogn"
 
   for rep in {1..5}; do
-    ./doExperiment.sh data MR times.csv ${clogn} ${n} ${rho} ${k} ${alpha} ${t} ${format}
+    ./doExperiment.sh data MR times.csv ${clogn} ${n} ${rho} ${k} ${alpha} ${t} ${format} ${clogn_reduce_naive}
   done
 
 done
