@@ -5,6 +5,7 @@ set -o nounset
 # set -o xtrace
 #Usage: $0 <hdfsDataDir> <MR | SPARK | ECHO> times_filename clogn n rho k alpha t [<binary | text>] [clogn_reduce_naive] [clogn_reduce_advanced]
 #ex:    $0 data MR times.csv 18750 64 0.4 1 62.5 1875 binary 18000 18700
+# export SPARK_HOME=/usr/iop/4.3.0.0-0000/spark2/
 
 stringContain() { [ -z "${2##*$1*}" ] && [ -z "$1" -o -n "$2" ]; }
 # 3125.5300000000 ==> 3125.53
@@ -26,19 +27,20 @@ stripDecimalZeros() {
 format="binary"
 k=1
 rho=0.4
-c=$(echo "250.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
-c_naive=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+c=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+#c_naive=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+# # of observations is alpha*n^(2/3)
+alpha=$(echo "4.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
 
-alpha=$(echo "2.0 / ${rho}" | bc -l | stripDecimalZeros)
-
-for n in 262144; do
-  clogn=$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
-  t=$(echo "${rho} / 1.5 * ${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
-  clogn_reduce_naive=$(echo "${c_naive} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
+for n in 4092; do
+  clogn=${alpha} #$(echo "${alpha} * ${n}) / l(2)" | bc -l | xargs printf "%.0f")
+  #$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
+  t=$(echo "${rho} / 1.2 " | bc -l ) #* ${c} * l(${n}) / l(2) | xargs printf "%.0f"
+  clogn_reduce_naive=$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
   #clogn_reduce_advanced="$clogn"
 
   for rep in {1..5}; do
-    ./doExperiment.sh data MR times.csv ${clogn} ${n} ${rho} ${k} ${alpha} ${t} ${format} ${clogn_reduce_naive}
+    ./doExperiment.sh data SPARK times.csv ${clogn} ${n} ${rho} ${k} ${alpha} ${t} ${format} ${clogn_reduce_naive} #${clogn_reduce_advanced}
   done
 
 done

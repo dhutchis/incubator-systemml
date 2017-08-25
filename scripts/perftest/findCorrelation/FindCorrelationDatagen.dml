@@ -1,6 +1,7 @@
 format=ifdef($format, "binary")
-clogn = $clogn
+alpha = $clogn
 n = $n
+clogn = round(alpha*n^(2/3))
 print("Generating A: "+clogn+" by "+n)
 rho = $rho
 print("rho is "+rho)

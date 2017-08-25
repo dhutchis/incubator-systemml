@@ -9,7 +9,7 @@ k = $k
 # Controls number of samples of the observations.
 alpha = $alpha
 # Threshold for deciding whether we found a correlated variable.
-t = round($t)
+t = round($t * alpha * n^(2/3))
 
 # How many observations to use? Default all observations.
 clogn = ifdef($clogn_reduce, clogn)
