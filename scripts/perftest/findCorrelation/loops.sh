@@ -32,7 +32,7 @@ c=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
 # # of observations is alpha*n^(2/3)
 alpha=$(echo "4.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
 
-for n in 4092; do
+for n in 5691; do
   clogn=${alpha} #$(echo "${alpha} * ${n}) / l(2)" | bc -l | xargs printf "%.0f")
   #$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
   t=$(echo "${rho} / 1.2 " | bc -l ) #* ${c} * l(${n}) / l(2) | xargs printf "%.0f"
@@ -40,7 +40,9 @@ for n in 4092; do
   #clogn_reduce_advanced="$clogn"
 
   for rep in {1..5}; do
-    ./doExperiment.sh data SPARK times.csv ${clogn} ${n} ${rho} ${k} ${alpha} ${t} ${format} ${clogn_reduce_naive} #${clogn_reduce_advanced}
+    CMD="./doExperiment.sh data SPARK times.csv ${clogn} ${n} ${rho} ${k} ${alpha} ${t} ${format} ${clogn_reduce_naive}" #${clogn_reduce_advanced}
+    echo ${CMD}
+    ${CMD}
   done
 
 done
