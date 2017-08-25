@@ -46,13 +46,22 @@ Y = matrix(0, rows=n13, cols=n13)
 sOnes = matrix(1, rows=k, cols=1)                  # k x 1 col vector of 1s
 g1 = 0
 g2 = 0
-C = matrix(0, rows=n23, cols=n23)
 
-#n_maxsafe = round(n/n13) # normally n23
-#n_overflow = n - (n_maxsafe-1)*n13
-#print("n_maxsafe is "+n_maxsafe)
-#print("n_overflow is "+n_overflow)
-print("n13*(n23-1) is "+(n13*(n23-1)))
+# Start mask matrix with 0s on the diagonal
+#M = matrix(1, rows=n23, cols=n23)
+#M = M - diag(v)
+
+#v = matrix(1, rows=n23, cols=1)
+#C = C - diag(v)
+C = matrix(0, rows=n23, cols=n23)
+# upper triangle
+for (i in 1:n23-1) {
+  nc = n23 - i
+  C[i,i+1:n23] = matrix(1, rows=1, cols=nc)
+}
+
+# Standard deviation
+std = clogn/sqrt(alpha)
 
 while (!ok) {
     failCount = failCount + 1
@@ -63,7 +72,7 @@ while (!ok) {
     for (i in 1:n23-1) {
     	  tmp = rand(rows=n13, cols=1, min=0, max=1, pdf="uniform", sparsity=1.0)
       S[(i-1)*n13+1:i*n13, i] = (tmp <= 0.5) - (tmp > 0.5)
-    }
+    } # for n that is not a power of 64...
     ntmp = n - n13*(n23-1)
     tmp = rand(rows=ntmp, cols=1, min=0, max=1, pdf="uniform", sparsity=1.0)
     S[n13*(n23-1)+1:n, i] = (tmp <= 0.5) - (tmp > 0.5)
@@ -72,23 +81,23 @@ while (!ok) {
     G = A %*% S
 
     #n^{2/3} * n^{2/3}
-    B = abs(t(G) %*% G)
     # todo: optimize matrix multiply that is symmetric: only need upper triangle
-
-
     #(g1,g2) = maxIndex( t(B)%*%B - diag(diag(t(B)%*%B)) )
-    X =  B - diag(diag(B))
-    C = C + (X >= t)
+    # Sparse Driver?
+    X = abs((t(G) %*% G) * (C != 0))
+    # Maybe make this sparser?
+    C = C + (X / std)
 
     Cmax = max(C)
-    cnt = sum(C >= Cmax-1)
-    #cnt2 = sum(C == Cmax-1)
-    #cnt3 = sum(C == Cmax-2)
-    ok = cnt == 2
+    Ckeep = C >= Cmax-6
+    #M = M * Ckeep
+    C = C * Ckeep
+    cnt = sum(C >= Cmax-3)
+    ok = cnt == 1
 }
 while( Cmax >= 1 ) {
-  cnt = sum(C == Cmax)
-  print("num equal to "+Cmax+" is "+cnt)
+  cnt = sum(C >= Cmax)
+  print("num >= "+Cmax+" is "+cnt)
   Cmax = Cmax - 1
 }
 C_rowmax = rowMaxs(C) # col vector of max val in each row
@@ -102,9 +111,6 @@ Y =  t(AG1)%*%AG2
 if (g1 == g2) {
     Y = Y - diag(diag(Y))
 }
-
-# todo: if a C entry is bad, blacklist it by setting it to -99999
-# todo: try C entries at max-1 and max-2
 
 Ymax = max(Y)
 print("(g1,g2): " + g1 + ", " + g2 + " -- max "+Ymax)

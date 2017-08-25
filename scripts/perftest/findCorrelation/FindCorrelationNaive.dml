@@ -11,9 +11,17 @@ A = A[1:clogn,]
 print("clogn is "+clogn)
 print("n is "+n)
 
+C = matrix(0, rows=n23, cols=n23)
+# upper triangle
+for (i in 1:clogn) {
+  nc = n - i
+  C[i,i+1:n23] = matrix(1, rows=1, cols=nc)
+}
+
 ##########################################################
 ## Naive:
-X =  t(A)%*%A - diag(diag(t(A)%*%A))
+#X =  t(A)%*%A - diag(diag(t(A)%*%A))
+X = (t(A)%*%A) * C
 X_rowmax = rowMaxs(X) # col vector of max val in each row
 X_rowidx = as.scalar(rowIndexMax(t(X_rowmax))) # row index of max val
 XR = X[X_rowidx,] # row vector

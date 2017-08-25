@@ -49,7 +49,7 @@ fO2="$1/advanced_${clogn}_${n}"
 #if ! hdfs dfs -test -f "${fA}" || ! hdfs dfs -test -f "${fA}.mtd"; then
 tstart=$SECONDS
 ${CMD} -f ${fDatagen} --nvargs A=${fA} ij=${fij} n=${n} clogn=${clogn} rho=${rho} format=${format}
-echo "datagen,${clogn},${n},${rho},$(($SECONDS - $tstart - 3))" >> ${fTimes}
+echo "datagen,$(date),${clogn},${n},${rho},$(($SECONDS - $tstart - 3))" >> ${fTimes}
 #fi
 
 
@@ -63,14 +63,14 @@ tend=$SECONDS
 #echo "cmp <(hdfs dfs -cat ${fij}) <(hdfs dfs -cat ${fO1})"
 #echo $?
 if cmp --silent <(hdfs dfs -cat "${fij}") <(hdfs dfs -cat "${fO1}"); then
-  echo "naive,${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))" >> ${fTimes}
+  echo "naive,$(date),${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))" >> ${fTimes}
 else
-  echo "FAIL: naive,${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))"
+  echo "FAIL: naive,$(date),${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))"
   echo "datagen: "
   hdfs dfs -cat "${fij}"
   echo "naive: "
   hdfs dfs -cat "${fO1}"
-  echo "naive,${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))" >> ${fTimesFail}
+  echo "naive,$(date),${clogn},${n},${rho},${clogn_reduce_naive},$(($tend - $tstart - 3))" >> ${fTimesFail}
 fi
 
 
@@ -82,13 +82,13 @@ else
 fi
 tend=$SECONDS
 if cmp --silent <(hdfs dfs -cat "${fij}") <(hdfs dfs -cat "${fO2}"); then
-  echo "advanced,${clogn},${n},${rho},${clogn_reduce_advanced},$(($tend - $tstart - 3))" >> ${fTimes}
+  echo "advanced,$(date),${clogn},${n},${rho},${clogn_reduce_advanced},$(($tend - $tstart - 3))" >> ${fTimes}
 else
-  echo "FAIL: advanced,${clogn},${n},${rho},${clogn_reduce_advanced},${k},${alpha},${t},$(($tend - $tstart - 3))"
+  echo "FAIL: advanced,$(date),${clogn},${n},${rho},${clogn_reduce_advanced},${k},${alpha},${t},$(($tend - $tstart - 3))"
   echo "datagen: "
   hdfs dfs -cat "${fij}"
   echo "advanced: "
   hdfs dfs -cat "${fO2}"
-  echo "advanced,${clogn},${n},${rho},${clogn_reduce_advanced},${k},${alpha},${t},$(($tend - $tstart - 3))" >> ${fTimesFail}
+  echo "advanced,$(date),${clogn},${n},${rho},${clogn_reduce_advanced},${k},${alpha},${t},$(($tend - $tstart - 3))" >> ${fTimesFail}
 fi
 

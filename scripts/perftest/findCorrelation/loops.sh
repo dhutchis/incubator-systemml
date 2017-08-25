@@ -27,12 +27,12 @@ stripDecimalZeros() {
 format="binary"
 k=1
 rho=0.4
-c=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+c=$(echo "4.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
 #c_naive=$(echo "5.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
 # # of observations is alpha*n^(2/3)
-alpha=$(echo "4.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
+alpha=$(echo "3.0 / ${rho} / ${rho}" | bc -l | stripDecimalZeros)
 
-for n in 5691; do
+for n in 20000; do
   clogn=${alpha} #$(echo "${alpha} * ${n}) / l(2)" | bc -l | xargs printf "%.0f")
   #$(echo "${c} * l(${n}) / l(2)" | bc -l | xargs printf "%.0f")
   t=$(echo "${rho} / 1.2 " | bc -l ) #* ${c} * l(${n}) / l(2) | xargs printf "%.0f"
