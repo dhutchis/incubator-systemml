@@ -144,22 +144,28 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			// greedy algorithm to find a good initial upper bound
 			final boolean[] greedyPlan;
 			final double greedyPlanCost;
-			final boolean skip01;
+			final Set<Integer> skipPlanHashes;
 			if( USE_GREEDY_COST_SEED ) {
 				final GreedyPlanSelector gps = new GreedyPlanSelector(memo, part, costs, part.getMatPointsExt());
 				gps.greedySelectPlan();
 				greedyPlan = gps.getGreedyPlan();
 				greedyPlanCost = gps.getGreedyPlanCost();
-				skip01 = true;
+				skipPlanHashes = gps.getCostedPlanHashes();
 			} else {
 				greedyPlan = null;
 				greedyPlanCost = Double.POSITIVE_INFINITY;
-				skip01 = false;
+				skipPlanHashes = Collections.emptySet();
 			}
 
-			//enumerate and cost plans, returns optional plan
-			boolean[] bestPlan = enumPlans(memo, part, costs, rgraph,
-					part.getMatPointsExt(), 0, greedyPlanCost, greedyPlan, skip01);
+			//enumerate and cost plans, returns optimal plan
+			final boolean[] bestPlan;
+			if (USE_GREEDY_COST_SEED && part.getMatPointsExt().length <= 2) {
+				bestPlan = greedyPlan; // greedy algorithm is exhaustive for small problems
+				Statistics.incrementCodegenEnumAll(UtilFunctions.pow(2, part.getMatPointsExt().length));
+			} else {
+				bestPlan = enumPlans(memo, part, costs, rgraph,
+						part.getMatPointsExt(), 0, greedyPlanCost, greedyPlan, skipPlanHashes, null, null);
+			}
 
 			//prune memo table wrt best plan and select plans
 			HashSet<Long> visited = new HashSet<Long>();
@@ -191,6 +197,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			this.matPoints = matPoints;
 			plan = new boolean[matPoints.length];
 			benefits = new double[matPoints.length];
+			lastEvalLevel = new int[matPoints.length];
 		}
 
 		private final boolean[] plan;
@@ -199,13 +206,22 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 		//   benefits[i] is an upper bound on the reduction in cost from planCost by materializing i.
 		// benefits[i] has no meaning if i is already true in plan.
 		private final double[] benefits;
+		private final int[] lastEvalLevel;
+		private int evalLevel = 0;
+
+		private Set<Integer> costedPlanHashes = new HashSet<>();
 		private int numEvalPlans = 0;
+		private int numEvalPartPlans = 0;
 
 		private double calcPlanCost() {
+			double c = getPlanCost(memo, part, matPoints, plan, costs._computeCosts, planCost);
 			numEvalPlans++;
-			return getPlanCost(memo, part, matPoints, plan, costs._computeCosts, planCost);
+			numEvalPartPlans += (c==Double.POSITIVE_INFINITY) ? 1 : 0;
+			return c;
 		}
-		private double calcNodeBenefit(int i) {
+		private double calcNodeBenefit(int i, boolean addToCalculated) {
+			lastEvalLevel[i] = evalLevel;
+
 			double lbC = Math.max(costs._read, costs._compute) + costs._write
 					+ getMaterializationCost(part, matPoints, memo, plan);
 			if( lbC >= planCost ) {
@@ -215,6 +231,11 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 
 			plan[i] = true;
 			double cost = calcPlanCost();
+			if( addToCalculated ) {
+				costedPlanHashes.add(Arrays.hashCode(plan));
+				if( LOG.isTraceEnabled() )
+					LOG.trace("Greedy algorithm costs plan: "+Arrays.toString(plan));
+			}
 			benefits[i] = planCost - cost;
 			plan[i] = false;
 			return benefits[i];
@@ -226,7 +247,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 
 			// materialize-one plan costs
 			for (int i = 0; i < matPoints.length; i++)
-				calcNodeBenefit(i);
+				calcNodeBenefit(i, false);
 
 			// heap of materialization points, by decreasing benefit (max heap)
 			final PriorityQueue<Integer> maxBenefitHeap = new PriorityQueue<>((o1, o2) ->
@@ -237,16 +258,15 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 				if (benefits[i] > 0)
 					maxBenefitHeap.add(i);
 
-			boolean firstPass = true;
 			while( !maxBenefitHeap.isEmpty() ) {
-				// this is an upper bound for all but the first iteration
+				// this is an upper bound; exact if we last evaluated maxBenefitNode at this evalLevel
 				final int maxBenefitNode = maxBenefitHeap.poll();
 				final double benefit = benefits[maxBenefitNode];
 				if( benefit <= 0 )
 					break;
 
-				if( !firstPass ) {
-					final double newBenefit = calcNodeBenefit(maxBenefitNode);
+				if( lastEvalLevel[maxBenefitNode] != evalLevel ) {
+					final double newBenefit = calcNodeBenefit(maxBenefitNode, true);
 					if( newBenefit != benefit ) {
 						// assumption: benefit cannot increase due to submodularity
 						if( newBenefit > benefit )
@@ -259,14 +279,16 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 						continue;
 					}
 				}
-				firstPass = false;
 
 				plan[maxBenefitNode] = true;
 				planCost -= benefit;
+				evalLevel++;
 			}
 			if( LOG.isTraceEnabled() )
-				LOG.trace("Greedy plan selection evaluated "+numEvalPlans+" " +
-						"and found the plan "+Arrays.toString(plan)+"with cost "+planCost);
+				LOG.trace("Greedy plan selection (n="+matPoints.length+") evaluated "+numEvalPlans+" " +
+						"and found the plan "+Arrays.toString(plan)+" with cost "+planCost);
+			Statistics.incrementCodegenEnumEval(numEvalPlans);
+			Statistics.incrementCodegenEnumEvalP(numEvalPartPlans);
 		}
 
 		boolean[] getGreedyPlan() {
@@ -275,6 +297,10 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 
 		double getGreedyPlanCost() {
 			return planCost;
+		}
+
+		Set<Integer> getCostedPlanHashes() {
+			return costedPlanHashes;
 		}
 	}
 	
@@ -297,7 +323,9 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 	 * @return optimal assignment of materialization points
 	 */
 	private static boolean[] enumPlans(CPlanMemoTable memo, PlanPartition part, StaticCosts costs, 
-		ReachabilityGraph rgraph, InterestingPoint[] matPoints, int off, double bestC, boolean[] bestPlan, boolean skip01)
+		ReachabilityGraph rgraph, InterestingPoint[] matPoints, int off, double bestC,
+									   boolean[] bestPlan, Set<Integer> skipPlanHashes,
+									   boolean[] planAbove, int[] freePosAbove)
 	{
 		//scan linearized search space, w/ skips for branch and bound pruning
 		//and structural pruning (where we solve conditionally independent problems)
@@ -305,16 +333,20 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 		long len = UtilFunctions.pow(2, matPoints.length-off);
 		long numEvalPlans = 0, numEvalPartPlans = 0;
 		
-		for( long i= skip01 ? 3 : 0; i<len; i++ ) {
+		for (long i = 0; i<len; i++ ) {
+			//!USE_GREEDY_COST_SEED ? 0 : off == 0 ? 3 : off == 1 ? 1 :
 			// the greedy algorithm already costed single-materialization plans
-			if( skip01 && Long.bitCount(i) == 1 )
-				continue;
+//			if(USE_GREEDY_COST_SEED && off == 0 && Long.bitCount(i) == 1)
+//				continue;
 			//construct assignment
 			boolean[] plan = createAssignment(matPoints.length-off, off, i);
 			long pskip = 0; //skip after costing
 			
 			//skip plans with structural pruning
 			if( USE_STRUCTURAL_PRUNING && (rgraph!=null) && rgraph.isCutSet(plan) ) {
+				if( USE_GREEDY_COST_SEED && off != 0 )
+					LibSpoofPrimitives.vectWrite(plan, planAbove, freePosAbove);
+
 				//compute skip (which also acts as boundary for subproblems)
 				pskip = rgraph.getNumSkipPlans(plan);
 				
@@ -324,7 +356,8 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 				//solve subproblems independently and combine into best plan
 				for( int j=0; j<prob.length; j++ ) {
 					boolean[] bestTmp = enumPlans(memo, part, 
-						costs, null, prob[j].freeMat, prob[j].offset, bestC, null, false);
+						costs, null, prob[j].freeMat, prob[j].offset, bestC,
+							null, skipPlanHashes, plan, prob[j].freePos);
 					LibSpoofPrimitives.vectWrite(bestTmp, plan, prob[j].freePos);
 				}
 				
@@ -343,27 +376,41 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 					continue;
 				}
 			}
-			
-			//cost assignment on hops. Stop early if exceeds bestC.
-			double pCBound = USE_COST_PRUNING ? bestC : Double.MAX_VALUE;
-			double C = getPlanCost(memo, part, matPoints, plan, costs._computeCosts, pCBound);
-			if (LOG.isTraceEnabled())
-				LOG.trace("Enum: " + Arrays.toString(plan) + " -> " + C);
-			numEvalPartPlans += (C==Double.POSITIVE_INFINITY) ? 1 : 0;
-			numEvalPlans++;
-			
-			//cost comparisons
-			if( bestPlan == null || C < bestC ) {
-				bestC = C;
-				bestPlan = plan;
-				if( LOG.isTraceEnabled() )
-					LOG.trace("Enum: Found new best plan.");
+
+			boolean ok;
+			if( !USE_GREEDY_COST_SEED )
+				ok = true;
+			else if( off == 0 ) {
+				ok = !zeroOrOneTrue(plan) &&
+						(skipPlanHashes.isEmpty() || !skipPlanHashes.contains(Arrays.hashCode(plan)));
+			} else {
+				LibSpoofPrimitives.vectWrite(plan, planAbove, freePosAbove);
+				ok = !zeroOrOneTrue(planAbove) &&
+						(skipPlanHashes.isEmpty() || !skipPlanHashes.contains(Arrays.hashCode(planAbove)));
 			}
-			
+
+			if( ok ) {
+				//cost assignment on hops. Stop early if exceeds bestC.
+				double pCBound = USE_COST_PRUNING ? bestC : Double.MAX_VALUE;
+				double C = getPlanCost(memo, part, matPoints, plan, costs._computeCosts, pCBound);
+				if (LOG.isTraceEnabled())
+					LOG.trace("Enum: " + Arrays.toString(plan) + " -> " + C);
+				numEvalPartPlans += (C == Double.POSITIVE_INFINITY) ? 1 : 0;
+				numEvalPlans++;
+
+				//cost comparisons
+				if (bestPlan == null || C < bestC) {
+					bestC = C;
+					bestPlan = plan;
+					if (LOG.isTraceEnabled())
+						LOG.trace("Enum: Found new best plan.");
+				}
+			}
+
 			//post skipping
 			i += pskip;
-			if( pskip !=0 && LOG.isTraceEnabled() )
-				LOG.trace("Enum: Skip "+pskip+" plans (by structure).");
+			if (pskip != 0 && LOG.isTraceEnabled())
+				LOG.trace("Enum: Skip " + pskip + " plans (by structure).");
 		}
 		
 		if( DMLScript.STATISTICS ) {
@@ -378,7 +425,20 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 		return (bestPlan==null) ? new boolean[matPoints.length-off] :
 			Arrays.copyOfRange(bestPlan, off, bestPlan.length);
 	}
-	
+
+	private static boolean zeroOrOneTrue(boolean[] plan) {
+		boolean sawFirst = false;
+		for (boolean b : plan) {
+			if (b) {
+				if (!sawFirst)
+					sawFirst = true;
+				else
+					return false;
+			}
+		}
+		return true;
+	}
+
 	private static boolean[] createAssignment(int len, int off, long pos) {
 		boolean[] ret = new boolean[off+len];
 		Arrays.fill(ret, 0, off, true);
