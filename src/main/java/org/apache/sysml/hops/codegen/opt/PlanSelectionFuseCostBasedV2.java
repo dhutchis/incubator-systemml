@@ -19,15 +19,7 @@
 
 package org.apache.sysml.hops.codegen.opt;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
@@ -93,6 +85,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 	
 	//optimizer configuration
 	public static boolean USE_COST_PRUNING = true;
+	public static boolean USE_GREEDY_COST_SEED = true;
 	public static boolean USE_STRUCTURAL_PRUNING = true;
 	
 	private static final IDSequence COST_ID = new IDSequence();
@@ -122,51 +115,166 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 		for( Entry<Long, List<MemoTableEntry>> e : getBestPlans().entrySet() )
 			memo.setDistinct(e.getKey(), e.getValue());
 	}
-	
-	private void selectPlans(CPlanMemoTable memo, PlanPartition part) 
-	{
+
+	private void selectPlans(CPlanMemoTable memo, PlanPartition part) {
 		//prune special case patterns and invalid plans (e.g., blocksize)
 		pruneInvalidAndSpecialCasePlans(memo, part);
-		
+
 		//if no materialization points, use basic fuse-all w/ partition awareness
-		if( part.getMatPointsExt() == null || part.getMatPointsExt().length==0 ) {
-			for( Long hopID : part.getRoots() )
-				rSelectPlansFuseAll(memo, 
-					memo.getHopRefs().get(hopID), null, part.getPartition());
-		}
-		else {
+		if (part.getMatPointsExt() == null || part.getMatPointsExt().length == 0) {
+			for (Long hopID : part.getRoots())
+				rSelectPlansFuseAll(memo,
+						memo.getHopRefs().get(hopID), null, part.getPartition());
+		} else {
 			//obtain hop compute costs per cell once
 			HashMap<Long, Double> computeCosts = new HashMap<Long, Double>();
-			for( Long hopID : part.getPartition() )
+			for (Long hopID : part.getPartition())
 				getComputeCosts(memo.getHopRefs().get(hopID), computeCosts);
-			
+
 			//prepare pruning helpers and prune memo table w/ determined mat points
-			StaticCosts costs = new StaticCosts(computeCosts, getComputeCost(computeCosts, memo), 
-				getReadCost(part, memo), getWriteCost(part.getRoots(), memo));
+			StaticCosts costs = new StaticCosts(computeCosts, getComputeCost(computeCosts, memo),
+					getReadCost(part, memo), getWriteCost(part.getRoots(), memo));
 			ReachabilityGraph rgraph = USE_STRUCTURAL_PRUNING ? new ReachabilityGraph(part, memo) : null;
-			if( USE_STRUCTURAL_PRUNING ) {
+			if (USE_STRUCTURAL_PRUNING) {
 				part.setMatPointsExt(rgraph.getSortedSearchSpace());
-				for( Long hopID : part.getPartition() )
+				for (Long hopID : part.getPartition())
 					memo.pruneRedundant(hopID, true, part.getMatPointsExt());
 			}
 
+			// greedy algorithm to find a good initial upper bound
+			final boolean[] greedyPlan;
+			final double greedyPlanCost;
+			final boolean skip01;
+			if( USE_GREEDY_COST_SEED ) {
+				final GreedyPlanSelector gps = new GreedyPlanSelector(memo, part, costs, part.getMatPointsExt());
+				gps.greedySelectPlan();
+				greedyPlan = gps.getGreedyPlan();
+				greedyPlanCost = gps.getGreedyPlanCost();
+				skip01 = true;
+			} else {
+				greedyPlan = null;
+				greedyPlanCost = Double.POSITIVE_INFINITY;
+				skip01 = false;
+			}
+
 			//enumerate and cost plans, returns optional plan
-			boolean[] bestPlan = enumPlans(memo, part, costs, rgraph, 
-					part.getMatPointsExt(), 0, Double.MAX_VALUE);
-			
+			boolean[] bestPlan = enumPlans(memo, part, costs, rgraph,
+					part.getMatPointsExt(), 0, greedyPlanCost, greedyPlan, skip01);
+
 			//prune memo table wrt best plan and select plans
 			HashSet<Long> visited = new HashSet<Long>();
-			for( Long hopID : part.getRoots() )
-				rPruneSuboptimalPlans(memo, memo.getHopRefs().get(hopID), 
-					visited, part, part.getMatPointsExt(), bestPlan);
+			for (Long hopID : part.getRoots())
+				rPruneSuboptimalPlans(memo, memo.getHopRefs().get(hopID),
+						visited, part, part.getMatPointsExt(), bestPlan);
 			HashSet<Long> visited2 = new HashSet<Long>();
-			for( Long hopID : part.getRoots() )
-				rPruneInvalidPlans(memo, memo.getHopRefs().get(hopID), 
-					visited2, part, bestPlan);
-			
-			for( Long hopID : part.getRoots() )
-				rSelectPlansFuseAll(memo, 
-					memo.getHopRefs().get(hopID), null, part.getPartition());
+			for (Long hopID : part.getRoots())
+				rPruneInvalidPlans(memo, memo.getHopRefs().get(hopID),
+						visited2, part, bestPlan);
+
+			for (Long hopID : part.getRoots())
+				rSelectPlansFuseAll(memo,
+						memo.getHopRefs().get(hopID), null, part.getPartition());
+		}
+	}
+
+	private static class GreedyPlanSelector {
+		private final CPlanMemoTable memo;
+		private final PlanPartition part;
+		private final StaticCosts costs;
+		private final InterestingPoint[] matPoints;
+
+		GreedyPlanSelector(CPlanMemoTable memo, PlanPartition part, StaticCosts costs,
+						   InterestingPoint[] matPoints) {
+			this.memo = memo;
+			this.part = part;
+			this.costs = costs;
+			this.matPoints = matPoints;
+			plan = new boolean[matPoints.length];
+			benefits = new double[matPoints.length];
+		}
+
+		private final boolean[] plan;
+		private double planCost = Double.POSITIVE_INFINITY;
+		// for each node i,
+		//   benefits[i] is an upper bound on the reduction in cost from planCost by materializing i.
+		// benefits[i] has no meaning if i is already true in plan.
+		private final double[] benefits;
+		private int numEvalPlans = 0;
+
+		private double calcPlanCost() {
+			numEvalPlans++;
+			return getPlanCost(memo, part, matPoints, plan, costs._computeCosts, planCost);
+		}
+		private double calcNodeBenefit(int i) {
+			double lbC = Math.max(costs._read, costs._compute) + costs._write
+					+ getMaterializationCost(part, matPoints, memo, plan);
+			if( lbC >= planCost ) {
+				benefits[i] = Double.NEGATIVE_INFINITY;
+				return Double.NEGATIVE_INFINITY;
+			}
+
+			plan[i] = true;
+			double cost = calcPlanCost();
+			benefits[i] = planCost - cost;
+			plan[i] = false;
+			return benefits[i];
+		}
+
+		void greedySelectPlan() {
+			// materialize-none plan cost
+			planCost = calcPlanCost();
+
+			// materialize-one plan costs
+			for (int i = 0; i < matPoints.length; i++)
+				calcNodeBenefit(i);
+
+			// heap of materialization points, by decreasing benefit (max heap)
+			final PriorityQueue<Integer> maxBenefitHeap = new PriorityQueue<>((o1, o2) ->
+					Double.compare(benefits[o2], benefits[o1])
+			);
+			// fill maxBenefitHeap with materialization points that could have a positive benefit
+			for (int i = 0; i < matPoints.length; i++)
+				if (benefits[i] > 0)
+					maxBenefitHeap.add(i);
+
+			boolean firstPass = true;
+			while( !maxBenefitHeap.isEmpty() ) {
+				// this is an upper bound for all but the first iteration
+				final int maxBenefitNode = maxBenefitHeap.poll();
+				final double benefit = benefits[maxBenefitNode];
+				if( benefit <= 0 )
+					break;
+
+				if( !firstPass ) {
+					final double newBenefit = calcNodeBenefit(maxBenefitNode);
+					if( newBenefit != benefit ) {
+						// assumption: benefit cannot increase due to submodularity
+						if( newBenefit > benefit )
+							throw new RuntimeException("Benefits are not submodular! Benefit of interesting point "+
+									maxBenefitNode+" increased from benefit "+benefit+" to "+newBenefit+
+									". Counterexample plan: "+part);
+						// if positive benefit, re-insert node (it may no longer be the max node)
+						if( newBenefit > 0 )
+							maxBenefitHeap.add(maxBenefitNode);
+						continue;
+					}
+				}
+				firstPass = false;
+
+				plan[maxBenefitNode] = true;
+				planCost -= benefit;
+			}
+			if( LOG.isTraceEnabled() )
+				LOG.trace("Greedy plan selection evaluated "+numEvalPlans+" " +
+						"and found the plan "+Arrays.toString(plan)+"with cost "+planCost);
+		}
+
+		boolean[] getGreedyPlan() {
+			return plan;
+		}
+
+		double getGreedyPlanCost() {
+			return planCost;
 		}
 	}
 	
@@ -189,16 +297,18 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 	 * @return optimal assignment of materialization points
 	 */
 	private static boolean[] enumPlans(CPlanMemoTable memo, PlanPartition part, StaticCosts costs, 
-		ReachabilityGraph rgraph, InterestingPoint[] matPoints, int off, double bestC)
+		ReachabilityGraph rgraph, InterestingPoint[] matPoints, int off, double bestC, boolean[] bestPlan, boolean skip01)
 	{
 		//scan linearized search space, w/ skips for branch and bound pruning
 		//and structural pruning (where we solve conditionally independent problems)
 		//bestC is monotonically non-increasing and serves as the upper bound
 		long len = UtilFunctions.pow(2, matPoints.length-off);
-		boolean[] bestPlan = null;
 		long numEvalPlans = 0, numEvalPartPlans = 0;
 		
-		for( long i=0; i<len; i++ ) {
+		for( long i= skip01 ? 3 : 0; i<len; i++ ) {
+			// the greedy algorithm already costed single-materialization plans
+			if( skip01 && Long.bitCount(i) == 1 )
+				continue;
 			//construct assignment
 			boolean[] plan = createAssignment(matPoints.length-off, off, i);
 			long pskip = 0; //skip after costing
@@ -214,7 +324,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 				//solve subproblems independently and combine into best plan
 				for( int j=0; j<prob.length; j++ ) {
 					boolean[] bestTmp = enumPlans(memo, part, 
-						costs, null, prob[j].freeMat, prob[j].offset, bestC);
+						costs, null, prob[j].freeMat, prob[j].offset, bestC, null, false);
 					LibSpoofPrimitives.vectWrite(bestTmp, plan, prob[j].freePos);
 				}
 				
