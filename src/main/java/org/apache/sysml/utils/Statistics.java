@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.LongAdder;
 import org.apache.sysml.api.DMLScript;
 import org.apache.sysml.conf.ConfigurationManager;
 import org.apache.sysml.hops.OptimizerUtils;
+import org.apache.sysml.hops.codegen.opt.PlanSelectionFuseCostBasedV2;
 import org.apache.sysml.runtime.controlprogram.caching.CacheStatistics;
 import org.apache.sysml.runtime.controlprogram.context.SparkExecutionContext;
 import org.apache.sysml.runtime.instructions.Instruction;
@@ -83,7 +84,9 @@ public class Statistics
 	private static final LongAdder codegenEnumEvalP = new LongAdder(); //count
 	private static final LongAdder codegenPlanCacheHits = new LongAdder(); //count
 	private static final LongAdder codegenPlanCacheTotal = new LongAdder(); //count
-	
+	private static final LongAdder codegenNontrivialDag = new LongAdder(); //count
+	private static final LongAdder codegenGreedyAgree = new LongAdder(); //count
+
 	//Function recompile stats 
 	private static final LongAdder funRecompileTime = new LongAdder(); //in nano sec
 	private static final LongAdder funRecompiles = new LongAdder(); //count
@@ -268,6 +271,12 @@ public class Statistics
 	public static void incrementCodegenEnumEvalP(long delta) {
 		codegenEnumEvalP.add(delta);
 	}
+	public static void incrementCodegenNontrivialDag(long delta) {
+		codegenNontrivialDag.add(delta);
+	}
+	public static void incrementCodegenGreedyAgree(long delta) {
+		codegenGreedyAgree.add(delta);
+	}
 	
 	public static void incrementCodegenClassCompile() {
 		codegenClassCompile.increment();
@@ -306,7 +315,13 @@ public class Statistics
 	public static long getCodegenEnumEvalP() {
 		return codegenEnumEvalP.longValue();
 	}
-	
+	public static long getCodegenNontrivialDag() {
+		return codegenNontrivialDag.longValue();
+	}
+	public static long getCodegenGreedyAgree() {
+		return codegenGreedyAgree.longValue();
+	}
+
 	public static long getCodegenClassCompile() {
 		return codegenClassCompile.longValue();
 	}
@@ -405,6 +420,8 @@ public class Statistics
 		codegenEnumAll.reset();
 		codegenEnumEval.reset();
 		codegenEnumEvalP.reset();
+		codegenNontrivialDag.reset();
+		codegenGreedyAgree.reset();
 		codegenCompileTime.reset();
 		codegenClassCompileTime.reset();
 		codegenPlanCacheHits.reset();
@@ -797,6 +814,16 @@ public class Statistics
 						+ getCodegenCPlanCompile() + "/" + getCodegenClassCompile() + ".\n");
 				sb.append("Codegen enum (All,Eval,EvalP):\t" + getCodegenEnumAll() + "/"
 						+ getCodegenEnumEval() + "/" + getCodegenEnumEvalP() + ".\n");
+				if( PlanSelectionFuseCostBasedV2.USE_GREEDY_COST_SEED ) {
+					final long nontrivialDag = getCodegenNontrivialDag();
+					final long greedyAgree = getCodegenGreedyAgree();
+					sb.append("Codegen greedy success rate:\t" + greedyAgree+"/"+nontrivialDag);
+					if( nontrivialDag != 0 )
+						sb.append(" ("+Math.round(1000.0*greedyAgree/nontrivialDag)/10+"%)");
+					sb.append('\n');
+					if( nontrivialDag != greedyAgree )
+						throw new RuntimeException(sb.toString());
+				}
 				sb.append("Codegen compile times (DAG,JC):\t" + String.format("%.3f", (double)getCodegenCompileTime()/1000000000) + "/" + 
 						String.format("%.3f", (double)getCodegenClassCompileTime()/1000000000)  + " sec.\n");
 				sb.append("Codegen plan cache hits:\t" + getCodegenPlanCacheHits() + "/" + getCodegenPlanCacheTotal() + ".\n");

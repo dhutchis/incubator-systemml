@@ -165,6 +165,11 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			} else {
 				bestPlan = enumPlans(memo, part, costs, rgraph,
 						part.getMatPointsExt(), 0, greedyPlanCost, greedyPlan, skipPlanHashes, null, null);
+				if( DMLScript.STATISTICS ) {
+                    Statistics.incrementCodegenNontrivialDag(1);
+				    if( Arrays.equals(greedyPlan, bestPlan) )
+                        Statistics.incrementCodegenGreedyAgree(1);
+                }
 			}
 
 			//prune memo table wrt best plan and select plans
@@ -237,29 +242,26 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			numEvalPartPlans += (c==Double.POSITIVE_INFINITY) ? 1 : 0;
 			return c;
 		}
-		private double calcNodeBenefit(int i, boolean addToCalculated) {
+		private double calcNodeBenefit(int i) {
 			lastEvalLevel[i] = evalLevel;
-
             for (Integer ii : mpIdxGroupByToId[i]) {
                 plan[ii] = true;
             }
+
             double lbC = Math.max(costs._read, costs._compute) + costs._write
 					+ getMaterializationCost(part, matPoints, memo, plan);
             if( lbC >= planCost ) {
                 benefits[i] = Double.NEGATIVE_INFINITY;
-                for (Integer ii : mpIdxGroupByToId[i]) {
-                    plan[ii] = false;
+            } else {
+                final double cost = calcPlanCost();
+                benefits[i] = planCost - cost;
+
+                costedPlanHashes.add(Arrays.hashCode(plan));
+                if (LOG.isTraceEnabled()) {
+                    LOG.trace("Greedy algorithm costs plan: " + Arrays.toString(plan));
                 }
-                return Double.NEGATIVE_INFINITY;
             }
 
-			double cost = calcPlanCost();
-			if( addToCalculated ) {
-				costedPlanHashes.add(Arrays.hashCode(plan));
-				if( LOG.isTraceEnabled() )
-					LOG.trace("Greedy algorithm costs plan: "+Arrays.toString(plan));
-			}
-			benefits[i] = planCost - cost;
             for (Integer ii : mpIdxGroupByToId[i]) {
                 plan[ii] = false;
             }
@@ -273,7 +275,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 
 			// materialize-one plan costs
 			for (int i = 0; i < mpIdxGroupByToId.length; i++)
-				calcNodeBenefit(i, true);
+				calcNodeBenefit(i);
 
 			// heap of materialization points, by decreasing benefit (max heap)
 			final PriorityQueue<Integer> maxBenefitHeap = new PriorityQueue<>((o1, o2) ->
@@ -292,7 +294,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 					break;
 
 				if( lastEvalLevel[maxBenefitNode] != evalLevel ) {
-					final double newBenefit = calcNodeBenefit(maxBenefitNode, true);
+					final double newBenefit = calcNodeBenefit(maxBenefitNode);
 					if( newBenefit != benefit ) {
 						// assumption: benefit cannot increase due to submodularity
 						if( newBenefit > benefit )
@@ -315,8 +317,10 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			if( LOG.isTraceEnabled() )
 				LOG.trace("Greedy plan selection (n="+matPoints.length+") evaluated "+numEvalPlans+" " +
 						"and found the plan "+Arrays.toString(plan)+" with cost "+planCost);
-			Statistics.incrementCodegenEnumEval(numEvalPlans);
-			Statistics.incrementCodegenEnumEvalP(numEvalPartPlans);
+			if( DMLScript.STATISTICS ) {
+                Statistics.incrementCodegenEnumEval(numEvalPlans);
+                Statistics.incrementCodegenEnumEvalP(numEvalPartPlans);
+            }
 		}
 
 		boolean[] getGreedyPlan() {
