@@ -159,7 +159,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 
 			//enumerate and cost plans, returns optimal plan
 			final boolean[] bestPlan;
-			if (USE_GREEDY_COST_SEED && part.getMatPointsExt().length <= 2) {
+			if (USE_GREEDY_COST_SEED && part.getMatPointsExt().length <= 1) {
 				bestPlan = greedyPlan; // greedy algorithm is exhaustive for small problems
 				Statistics.incrementCodegenEnumAll(UtilFunctions.pow(2, part.getMatPointsExt().length));
 			} else {
@@ -188,16 +188,34 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 		private final PlanPartition part;
 		private final StaticCosts costs;
 		private final InterestingPoint[] matPoints;
+		private final List<Integer>[] mpIdxGroupByToId;
 
-		GreedyPlanSelector(CPlanMemoTable memo, PlanPartition part, StaticCosts costs,
-						   InterestingPoint[] matPoints) {
+		@SuppressWarnings("unchecked")
+        GreedyPlanSelector(CPlanMemoTable memo, PlanPartition part, StaticCosts costs,
+                           InterestingPoint[] matPoints) {
 			this.memo = memo;
 			this.part = part;
 			this.costs = costs;
 			this.matPoints = matPoints;
-			plan = new boolean[matPoints.length];
-			benefits = new double[matPoints.length];
-			lastEvalLevel = new int[matPoints.length];
+
+			final Map<Long, List<Integer>> idToMp = new HashMap<>();
+            for (int i = 0; i < matPoints.length; i++) {
+                long id = matPoints[i].getToHopID();
+                if( idToMp.containsKey(id) ) {
+                    idToMp.get(id).add(i);
+                } else {
+                    List<Integer> li = new ArrayList<>();
+                    li.add(i);
+                    idToMp.put(id, li);
+                }
+            }
+            mpIdxGroupByToId = idToMp.values().toArray(new List[0]);
+            if( LOG.isTraceEnabled() )
+                LOG.trace("Greedy algorithm groups: "+Arrays.toString(mpIdxGroupByToId));
+
+            plan = new boolean[matPoints.length];
+			benefits = new double[mpIdxGroupByToId.length];
+			lastEvalLevel = new int[mpIdxGroupByToId.length];
 		}
 
 		private final boolean[] plan;
@@ -222,14 +240,19 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 		private double calcNodeBenefit(int i, boolean addToCalculated) {
 			lastEvalLevel[i] = evalLevel;
 
-			double lbC = Math.max(costs._read, costs._compute) + costs._write
+            for (Integer ii : mpIdxGroupByToId[i]) {
+                plan[ii] = true;
+            }
+            double lbC = Math.max(costs._read, costs._compute) + costs._write
 					+ getMaterializationCost(part, matPoints, memo, plan);
-			if( lbC >= planCost ) {
-				benefits[i] = Double.NEGATIVE_INFINITY;
-				return Double.NEGATIVE_INFINITY;
-			}
+            if( lbC >= planCost ) {
+                benefits[i] = Double.NEGATIVE_INFINITY;
+                for (Integer ii : mpIdxGroupByToId[i]) {
+                    plan[ii] = false;
+                }
+                return Double.NEGATIVE_INFINITY;
+            }
 
-			plan[i] = true;
 			double cost = calcPlanCost();
 			if( addToCalculated ) {
 				costedPlanHashes.add(Arrays.hashCode(plan));
@@ -237,24 +260,27 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 					LOG.trace("Greedy algorithm costs plan: "+Arrays.toString(plan));
 			}
 			benefits[i] = planCost - cost;
-			plan[i] = false;
+            for (Integer ii : mpIdxGroupByToId[i]) {
+                plan[ii] = false;
+            }
 			return benefits[i];
 		}
 
 		void greedySelectPlan() {
 			// materialize-none plan cost
 			planCost = calcPlanCost();
+            costedPlanHashes.add(Arrays.hashCode(plan));
 
 			// materialize-one plan costs
-			for (int i = 0; i < matPoints.length; i++)
-				calcNodeBenefit(i, false);
+			for (int i = 0; i < mpIdxGroupByToId.length; i++)
+				calcNodeBenefit(i, true);
 
 			// heap of materialization points, by decreasing benefit (max heap)
 			final PriorityQueue<Integer> maxBenefitHeap = new PriorityQueue<>((o1, o2) ->
 					Double.compare(benefits[o2], benefits[o1])
 			);
 			// fill maxBenefitHeap with materialization points that could have a positive benefit
-			for (int i = 0; i < matPoints.length; i++)
+			for (int i = 0; i < mpIdxGroupByToId.length; i++)
 				if (benefits[i] > 0)
 					maxBenefitHeap.add(i);
 
@@ -280,7 +306,9 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 					}
 				}
 
-				plan[maxBenefitNode] = true;
+                for (Integer ii : mpIdxGroupByToId[maxBenefitNode]) {
+                    plan[ii] = true;
+                }
 				planCost -= benefit;
 				evalLevel++;
 			}
@@ -381,12 +409,10 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			if( !USE_GREEDY_COST_SEED )
 				ok = true;
 			else if( off == 0 ) {
-				ok = !zeroOrOneTrue(plan) &&
-						(skipPlanHashes.isEmpty() || !skipPlanHashes.contains(Arrays.hashCode(plan)));
+				ok = !skipPlanHashes.contains(Arrays.hashCode(plan));
 			} else {
 				LibSpoofPrimitives.vectWrite(plan, planAbove, freePosAbove);
-				ok = !zeroOrOneTrue(planAbove) &&
-						(skipPlanHashes.isEmpty() || !skipPlanHashes.contains(Arrays.hashCode(planAbove)));
+				ok = !skipPlanHashes.contains(Arrays.hashCode(planAbove));
 			}
 
 			if( ok ) {
