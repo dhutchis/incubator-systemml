@@ -169,6 +169,8 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
                     Statistics.incrementCodegenNontrivialDag(1);
 				    if( Arrays.equals(greedyPlan, bestPlan) )
                         Statistics.incrementCodegenGreedyAgree(1);
+				    else if( LOG.isTraceEnabled() )
+				    	LOG.trace("Greedy algorithm plan "+Arrays.toString(greedyPlan)+" does not match exhaustive algorithm plan "+Arrays.toString(bestPlan));
                 }
 			}
 
@@ -204,6 +206,8 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			this.matPoints = matPoints;
 
 			final Map<Long, List<Integer>> idToMp = new HashMap<>();
+			if( LOG.isTraceEnabled())
+				LOG.trace("MPs: "+Arrays.toString(matPoints));
             for (int i = 0; i < matPoints.length; i++) {
                 long id = matPoints[i].getToHopID();
                 if( idToMp.containsKey(id) ) {
@@ -298,7 +302,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 					if( newBenefit != benefit ) {
 						// assumption: benefit cannot increase due to submodularity
 						if( newBenefit > benefit )
-							throw new RuntimeException("Benefits are not submodular! Benefit of interesting point "+
+							LOG.warn("Benefits are not submodular! Benefit of interesting point "+
 									maxBenefitNode+" increased from benefit "+benefit+" to "+newBenefit+
 									". Counterexample plan: "+part);
 						// if positive benefit, re-insert node (it may no longer be the max node)

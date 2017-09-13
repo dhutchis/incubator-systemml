@@ -821,8 +821,8 @@ public class Statistics
 					if( nontrivialDag != 0 )
 						sb.append(" ("+Math.round(1000.0*greedyAgree/nontrivialDag)/10+"%)");
 					sb.append('\n');
-					if( nontrivialDag != greedyAgree )
-						throw new RuntimeException(sb.toString());
+//					if( nontrivialDag != greedyAgree )
+//						throw new RuntimeException(sb.toString());
 				}
 				sb.append("Codegen compile times (DAG,JC):\t" + String.format("%.3f", (double)getCodegenCompileTime()/1000000000) + "/" + 
 						String.format("%.3f", (double)getCodegenClassCompileTime()/1000000000)  + " sec.\n");
