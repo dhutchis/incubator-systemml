@@ -86,6 +86,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 	//optimizer configuration
 	public static boolean USE_COST_PRUNING = true;
 	public static boolean USE_GREEDY_COST_SEED = true;
+	public static boolean USE_ONLY_GREEDY = false;
 	public static boolean USE_STRUCTURAL_PRUNING = true;
 	
 	private static final IDSequence COST_ID = new IDSequence();
@@ -145,7 +146,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 			final boolean[] greedyPlan;
 			final double greedyPlanCost;
 			final Set<Integer> skipPlanHashes;
-			if( USE_GREEDY_COST_SEED ) {
+			if( USE_GREEDY_COST_SEED || USE_ONLY_GREEDY ) {
 				final GreedyPlanSelector gps = new GreedyPlanSelector(memo, part, costs, part.getMatPointsExt());
 				gps.greedySelectPlan();
 				greedyPlan = gps.getGreedyPlan();
@@ -159,7 +160,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 
 			//enumerate and cost plans, returns optimal plan
 			final boolean[] bestPlan;
-			if (USE_GREEDY_COST_SEED && part.getMatPointsExt().length <= 1) {
+			if (USE_ONLY_GREEDY || USE_GREEDY_COST_SEED && part.getMatPointsExt().length <= 1) {
 				bestPlan = greedyPlan; // greedy algorithm is exhaustive for small problems
 				Statistics.incrementCodegenEnumAll(UtilFunctions.pow(2, part.getMatPointsExt().length));
 			} else {
@@ -169,8 +170,8 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
                     Statistics.incrementCodegenNontrivialDag(1);
 				    if( Arrays.equals(greedyPlan, bestPlan) )
                         Statistics.incrementCodegenGreedyAgree(1);
-				    else if( LOG.isTraceEnabled() )
-				    	LOG.trace("Greedy algorithm plan "+Arrays.toString(greedyPlan)+" does not match exhaustive algorithm plan "+Arrays.toString(bestPlan));
+				    else if( LOG.isDebugEnabled() )
+				    	LOG.debug("Greedy algorithm plan "+Arrays.toString(greedyPlan)+" does not match exhaustive algorithm plan "+Arrays.toString(bestPlan));
                 }
 			}
 
@@ -413,7 +414,7 @@ public class PlanSelectionFuseCostBasedV2 extends PlanSelection
 				}
 			}
 
-			boolean ok;
+			final boolean ok;
 			if( !USE_GREEDY_COST_SEED )
 				ok = true;
 			else if( off == 0 ) {
