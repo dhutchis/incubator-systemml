@@ -85,13 +85,23 @@ public class ColGroupDDC2 extends ColGroupDDC
 	}
 	
 	@Override
+	protected double getData(int r) {
+		return _values[_data[r]];
+	}
+	
+	@Override
 	protected double getData(int r, int colIx) {
 		return _values[_data[r]*getNumCols()+colIx];
 	}
-
+	
 	@Override
 	protected void setData(int r, int code) {
 		_data[r] = (char)code;
+	}
+	
+	@Override
+	protected int getCode(int r) {
+		return _data[r];
 	}
 	
 	@Override
@@ -183,14 +193,15 @@ public class ColGroupDDC2 extends ColGroupDDC
 	
 	@Override 
 	public int[] getCounts() {
-		final int nrow = getNumRows();
+		return getCounts(0, getNumRows());
+	}
+	
+	@Override 
+	public int[] getCounts(int rl, int ru) {
 		final int numVals = getNumValues();
-		
 		int[] counts = new int[numVals];
-		for( int i=0; i<nrow; i++ ) {
+		for( int i=rl; i<ru; i++ )
 			counts[_data[i]] ++;
-		}
-		
 		return counts;
 	}
 	
@@ -280,7 +291,7 @@ public class ColGroupDDC2 extends ColGroupDDC
 			//temporary array also avoids false sharing in multi-threaded environments
 			double[] vals = allocDVector(numVals, true);
 			for( int i=0; i<nrow; i++ ) {
-				vals[_data[i]] += a.getData(i, 0);
+				vals[_data[i]] += a.getData(i);
 			}
 			
 			//post-scaling of pre-aggregate with distinct values

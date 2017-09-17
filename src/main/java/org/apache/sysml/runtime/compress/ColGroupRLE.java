@@ -226,7 +226,6 @@ public class ColGroupRLE extends ColGroupOffset
 	@Override 
 	public int[] getCounts() {
 		final int numVals = getNumValues();
-		
 		int[] counts = new int[numVals];
 		for (int k = 0; k < numVals; k++) {
 			int boff = _ptr[k];
@@ -240,7 +239,28 @@ public class ColGroupRLE extends ColGroupOffset
 			}
 			counts[k] = count;
 		}
-		
+		return counts;
+	}
+	
+	@Override 
+	public int[] getCounts(int rl, int ru) {
+		final int numVals = getNumValues();
+		int[] counts = new int[numVals];
+		for (int k = 0; k < numVals; k++) {
+			int boff = _ptr[k];
+			int blen = len(k);
+			Pair<Integer,Integer> tmp = skipScanVal(k, rl);
+			int bix = tmp.getKey();
+			int curRunStartOff = tmp.getValue();
+			int curRunEnd = tmp.getValue();
+			int count = 0;
+			for ( ; bix<blen && curRunEnd<ru; bix+=2) {
+				curRunStartOff = curRunEnd + _data[boff+bix];
+				curRunEnd = curRunStartOff + _data[boff+bix+1];
+				count += Math.min(curRunEnd, ru)-curRunStartOff;
+			}
+			counts[k] = count;
+		}
 		return counts;
 	}
 	
@@ -770,11 +790,17 @@ public class ColGroupRLE extends ColGroupOffset
 		return new RLEValueIterator(k, 0, getNumRows());
 	}
 	
+	
 	@Override
 	public Iterator<Integer> getIterator(int k, int rl, int ru) {
 		return new RLEValueIterator(k, rl, ru);
 	}
-
+	
+	@Override
+	public ColGroupRowIterator getRowIterator(int rl, int ru) {
+		return new RLERowIterator(rl, ru);
+	}
+	
 	private class RLEValueIterator implements Iterator<Integer>
 	{
 		private final int _ru;
@@ -825,6 +851,75 @@ public class ColGroupRLE extends ColGroupOffset
 			//increment row index within run
 			else {
 				_rpos++;
+			}
+		}
+	}
+	
+	private class RLERowIterator extends ColGroupRowIterator
+	{
+		//iterator configuration 
+		private final int _ru;
+		//iterator state
+		private final int[] _astart;
+		private final int[] _apos;
+		private final int[] _vcodes;
+		private int _rpos = -1;
+		
+		public RLERowIterator(int rl, int ru) {
+			_ru = ru;
+			_rpos = rl;
+			_astart = new int[getNumValues()];
+			_apos = skipScan(getNumValues(), rl, _astart);
+			_vcodes = new int[Math.min(BitmapEncoder.BITMAP_BLOCK_SZ, ru-rl)];
+			Arrays.fill(_vcodes, -1); //initial reset
+			getNextSegment();
+		}
+		
+		@Override
+		public boolean hasNext() {
+			return (_rpos < _ru);
+		}
+		
+		@Override
+		public void next(double[] buff) {
+			//copy entire value tuple or reset to zero
+			int ix = _rpos%BitmapEncoder.BITMAP_BLOCK_SZ;
+			final int clen = getNumCols();
+			for(int j=0, off=_vcodes[ix]*clen; j<clen; j++)
+				if( _vcodes[ix] >= 0 )
+					buff[_colIndexes[j]] = _values[off+j];
+			//reset vcode to avoid scan on next segment
+			_vcodes[ix] = -1;
+			//advance position to next row
+			_rpos++;
+			if( _rpos%BitmapEncoder.BITMAP_BLOCK_SZ==0 && _rpos<_ru )
+				getNextSegment();
+		}
+		
+		public void getNextSegment() {
+			//materialize value codes for entire segment in a 
+			//single pass over all values (store value code by pos)
+			final int numVals = getNumValues();
+			final int blksz = BitmapEncoder.BITMAP_BLOCK_SZ;
+			for (int k = 0; k < numVals; k++) {
+				int boff = _ptr[k];
+				int blen = len(k);
+				int bix = _apos[k];
+				int start = _astart[k];
+				int end = (_rpos/blksz+1)*blksz;
+				while( bix < blen && start < end ) {
+					int lstart = _data[boff + bix];
+					int llen = _data[boff + bix + 1];
+					//set codes of entire run, with awareness of unaligned runs/segments
+					Arrays.fill(_vcodes, Math.min(Math.max(_rpos, start+lstart), end)-_rpos, 
+						Math.min(start+lstart+llen,end)-_rpos, k);
+					if( start+lstart+llen >= end )
+						break;
+					start += lstart + llen;
+					bix += 2;
+				}
+				_apos[k] = bix;
+				_astart[k] = start;
 			}
 		}
 	}

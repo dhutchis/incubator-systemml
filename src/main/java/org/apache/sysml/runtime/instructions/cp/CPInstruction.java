@@ -52,26 +52,27 @@ public abstract class CPInstruction extends Instruction
 	public final static String MISC_TIMER_RELEASE_BUFF_WRITE =			"rlswr";// time spent in buffer write in release operation
 	public final static String MISC_TIMER_SPARSE_TO_DENSE =				"s2d";  // time spent in sparse to dense conversion
 	public final static String MISC_TIMER_DENSE_TO_SPARSE =				"d2s";  // time spent in sparse to dense conversion
+	public final static String MISC_TIMER_RECOMPUTE_NNZ =				"rnnz"; // time spent in recompute non-zeroes
 	
 	// Instruction specific miscellaneous timers that were found as potential bottlenecks in one of performance analysis.
 	// SystemML committers have to be judicious about adding them by weighing the tradeoffs between reuse in future analysis and unnecessary overheads.
 	public final static String MISC_TIMER_CSR_LIX_COPY =				"csrlix";// time spent in CSR-specific method to address performance issues due to repeated re-shifting on update-in-place.
 	public final static String MISC_TIMER_LIX_COPY =					"lixcp";// time spent in range copy
-	
-	public CPInstruction(String opcode, String istr) {
+
+	protected CPInstruction(String opcode, String istr) {
 		type = INSTRUCTION_TYPE.CONTROL_PROGRAM;
 		instString = istr;
-		
-		//prepare opcode and update requirement for repeated usage
+
+		// prepare opcode and update requirement for repeated usage
 		instOpcode = opcode;
 		_requiresLabelUpdate = super.requiresLabelUpdate();
 	}
-	
-	public CPInstruction(Operator op, String opcode, String istr) {
+
+	protected CPInstruction(Operator op, String opcode, String istr) {
 		this(opcode, istr);
 		_optr = op;
 	}
-	
+
 	public CPINSTRUCTION_TYPE getCPInstructionType() {
 		return _cptype;
 	}

@@ -19,6 +19,7 @@
 
 package org.apache.sysml.hops.codegen.template;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import org.apache.commons.lang.ArrayUtils;
@@ -185,11 +186,12 @@ public class TemplateUtils
 		Hop B1 = (inputs.length>1) ? inputs[1] : null;
 		if( (X!=null && HopRewriteUtils.isEqualSize(output, X)) || X==null )
 			return RowType.NO_AGG;
-		else if( (B1!=null && output.getDim1()==X.getDim1() && output.getDim2()==B1.getDim2())
+		else if( ((B1!=null && output.getDim1()==X.getDim1() && output.getDim2()==B1.getDim2())
 			|| (output instanceof IndexingOp && HopRewriteUtils.isColumnRangeIndexing((IndexingOp)output)))
+			&& !(output instanceof AggBinaryOp && HopRewriteUtils.isTransposeOfItself(output.getInput().get(0),X)) )
 			return RowType.NO_AGG_B1;
 		else if( output.getDim1()==X.getDim1() && (output.getDim2()==1 
-				|| HopRewriteUtils.isBinary(output, OpOp2.CBIND)) 
+				|| HopRewriteUtils.isBinary(output, OpOp2.CBIND))
 			&& !(output instanceof AggBinaryOp && HopRewriteUtils
 				.isTransposeOfItself(output.getInput().get(0),X)))
 			return RowType.ROW_AGG;
@@ -205,7 +207,7 @@ public class TemplateUtils
 		else if( B1 != null && output.getDim1()==B1.getDim2() && output.getDim2()==X.getDim2())
 			return RowType.COL_AGG_B1;
 		else
-			throw new RuntimeException("Unknown row type.");
+			throw new RuntimeException("Unknown row type for hop "+output.getHopID()+".");
 	}
 	
 	public static AggOp getAggOp(Hop hop) {
@@ -428,5 +430,62 @@ public class TemplateUtils
 		ret |= isBinary(node, type);
 		node.setVisited();
 		return ret;
+	}
+	
+	public static boolean containsOuterProduct(Hop hop) {
+		hop.resetVisitStatus();
+		boolean ret = rContainsOuterProduct(hop);
+		hop.resetVisitStatus();
+		return ret;
+	}
+	
+	public static boolean containsOuterProduct(Hop hop, Hop probe) {
+		hop.resetVisitStatus();
+		boolean ret = rContainsOuterProduct(hop, probe);
+		hop.resetVisitStatus();
+		return ret;
+	}
+	
+	private static boolean rContainsOuterProduct(Hop current) {
+		if( current.isVisited() )
+			return false;
+		boolean ret = false;
+		ret |= HopRewriteUtils.isOuterProductLikeMM(current);
+		for( int i=0; i<current.getInput().size() && !ret; i++ )
+			ret |= rContainsOuterProduct(current.getInput().get(i));
+		current.setVisited();
+		return ret;
+	}
+	
+	private static boolean rContainsOuterProduct(Hop current, Hop probe) {
+		if( current.isVisited() )
+			return false;
+		boolean ret = false;
+		ret |= HopRewriteUtils.isOuterProductLikeMM(current)
+			&& checkContainment(current.getInput(), probe, true);
+		for( int i=0; i<current.getInput().size() && !ret; i++ )
+			ret |= rContainsOuterProduct(current.getInput().get(i), probe);
+		current.setVisited();
+		return ret;
+	}
+	
+	private static boolean checkContainment(ArrayList<Hop> inputs, Hop probe, boolean inclTranspose) {
+		if( !inclTranspose )
+			return inputs.contains(probe);
+		for( Hop hop : inputs )
+			if( HopRewriteUtils.isTransposeOfItself(hop, probe) )
+				return true;
+		return false;
+	}
+	
+	public static void rFlipVectorLookups(CNode current) {
+		//flip vector lookups if necessary
+		if( isUnary(current, UnaryType.LOOKUP_C) )
+			((CNodeUnary)current).setType(UnaryType.LOOKUP_R);
+		else if( isUnary(current, UnaryType.LOOKUP_R) )
+			((CNodeUnary)current).setType(UnaryType.LOOKUP_C);
+		//recursively process children
+		for( CNode input : current.getInput() )
+			rFlipVectorLookups(input);
 	}
 }

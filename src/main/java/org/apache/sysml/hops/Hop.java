@@ -42,6 +42,7 @@ import org.apache.sysml.lops.ReBlock;
 import org.apache.sysml.lops.UnaryCP;
 import org.apache.sysml.parser.Expression.DataType;
 import org.apache.sysml.parser.Expression.ValueType;
+import org.apache.sysml.parser.ParseInfo;
 import org.apache.sysml.runtime.controlprogram.LocalVariableMap;
 import org.apache.sysml.runtime.controlprogram.caching.MatrixObject.UpdateType;
 import org.apache.sysml.runtime.controlprogram.context.SparkExecutionContext;
@@ -52,7 +53,7 @@ import org.apache.sysml.runtime.matrix.data.MatrixBlock;
 import org.apache.sysml.runtime.util.UtilFunctions;
 
 
-public abstract class Hop 
+public abstract class Hop implements ParseInfo
 {
 	protected static final Log LOG =  LogFactory.getLog(Hop.class.getName());
 	
@@ -192,7 +193,9 @@ public abstract class Hop
 	
 	public void checkAndSetForcedPlatform()
 	{
-		if ( DMLScript.rtplatform == RUNTIME_PLATFORM.SINGLE_NODE )
+		if(DMLScript.USE_ACCELERATOR && DMLScript.FORCE_ACCELERATOR && isGPUEnabled())
+			_etypeForced = ExecType.GPU;
+		else if ( DMLScript.rtplatform == RUNTIME_PLATFORM.SINGLE_NODE )
 			_etypeForced = ExecType.CP;
 		else if ( DMLScript.rtplatform == RUNTIME_PLATFORM.HADOOP )
 			_etypeForced = ExecType.MR;
@@ -228,14 +231,6 @@ public abstract class Hop
 			}
 		}
 	}
-	
-	public void setRequiresReblock(boolean flag) {
-		_requiresReblock = flag;
-	}
-	
-	public void setRequiresCompression(boolean flag) {
-		_requiresCompression = flag;
-	}
 
 	public boolean hasMatrixInputWithDifferentBlocksizes()
 	{
@@ -251,27 +246,35 @@ public abstract class Hop
 		return false;
 	}
 	
-	public void setOutputBlocksizes( long brlen, long bclen )
-	{
+	public void setOutputBlocksizes( long brlen, long bclen ) {
 		setRowsInBlock( brlen );
 		setColsInBlock( bclen );
 	}
 	
-	public boolean requiresReblock()
-	{
+	public void setRequiresReblock(boolean flag) {
+		_requiresReblock = flag;
+	}
+	
+	public boolean requiresReblock() {
 		return _requiresReblock;
 	}
 	
-	public void setRequiresCheckpoint(boolean flag)
-	{
+	public void setRequiresCheckpoint(boolean flag) {
 		_requiresCheckpoint = flag;
 	}
 	
-	public boolean requiresCheckpoint()
-	{
+	public boolean requiresCheckpoint() {
 		return _requiresCheckpoint;
 	}
-
+	
+	public void setRequiresCompression(boolean flag) {
+		_requiresCompression = flag;
+	}
+	
+	public boolean requiresCompression() {
+		return _requiresCompression;
+	}
+	
 	public void constructAndSetLopsDataFlowProperties() 
 		throws HopsException
 	{
@@ -705,30 +708,7 @@ public abstract class Hop
 		_validCPSizeEstimate = (wstats!=null) ? OptimizerUtils.isValidCPMatrixSize(
 			wstats[0], wstats[1], OptimizerUtils.getSparsity(wstats[0], wstats[1], wstats[2])) : false;
 	}
-
 	
-	/**
-	 * Computes the hop-specific output memory estimate in bytes. Should be 0 if not
-	 * applicable. 
-	 * 
-	 * @param dim1 dimension 1
-	 * @param dim2 dimension 2
-	 * @param nnz number of non-zeros
-	 * @return memory estimate
-	 */
-	protected abstract double computeOutputMemEstimate( long dim1, long dim2, long nnz );
-
-	/**
-	 * Computes the hop-specific intermediate memory estimate in bytes. Should be 0 if not
-	 * applicable.
-	 * 
-	 * @param dim1 dimension 1
-	 * @param dim2 dimension 2
-	 * @param nnz number of non-zeros
-	 * @return memory estimate
-	 */
-	protected abstract double computeIntermediateMemEstimate( long dim1, long dim2, long nnz );
-
 	/**
 	 * Computes the output matrix characteristics (rows, cols, nnz) based on worst-case output
 	 * and/or input estimates. Should return null if dimensions are unknown.
@@ -768,8 +748,12 @@ public abstract class Hop
 	protected ExecType findExecTypeByMemEstimate() {
 		ExecType et = null;
 		char c = ' ';
-		if ( getMemEstimate() < OptimizerUtils.getLocalMemBudget() ) {
-			et = ExecType.CP;
+		double memEst = getMemEstimate();
+		if ( memEst < OptimizerUtils.getLocalMemBudget() ) {
+			if (DMLScript.USE_ACCELERATOR && isGPUEnabled() && memEst < GPUContextPool.initialGPUMemBudget())
+				et = ExecType.GPU;
+			else
+				et = ExecType.CP;
 		}
 		else {
 			if( DMLScript.rtplatform == DMLScript.RUNTIME_PLATFORM.HYBRID )
@@ -786,14 +770,6 @@ public abstract class Hop
 			LOG.debug(s);
 		}
 		
-		return et;
-	}
-	
-	protected ExecType findGPUExecTypeByMemEstimate(ExecType et) {
-		if (DMLScript.USE_ACCELERATOR && (DMLScript.FORCE_ACCELERATOR
-				|| getMemEstimate() < Math.min(GPUContextPool.initialGPUMemBudget(), OptimizerUtils.getLocalMemBudget()))) {
-			return ExecType.GPU;
-		}
 		return et;
 	}
 
@@ -850,6 +826,58 @@ public abstract class Hop
 	
 	public abstract String getOpString();
 
+	// ========================================================================================
+	// Design doc: Memory estimation of GPU
+	// 1. Since not all operator are supported on GPU, isGPUEnabled indicates whether an operation 
+	// is enabled for GPU. This method doesnot take into account any memory estimates.
+	// 2. To simplify memory estimation logic, the methods computeOutputMemEstimate and computeIntermediateMemEstimate
+	// should return maximum of memory required for GPU and CP operators. 
+	// 3. Additionally, these methods are guarded so that when -gpu flag is not provided, additional memory overhead due to GPU
+	// are ignored. For example: sparse-to-dense conversion on GPU. 
+	// 4. (WIP) Every GPU operators should respect the memory returned by computeIntermediateMemEstimate (and computeOutputMemEstimate - see below point).
+	// 5. (WIP) Every GPU operator should create output in the same format as the corresponding CP operator. That is,  computeOutputMemEstimate
+	// are consistent across both CP and GPU in terms of worst-case.
+	// 6. The drawback of using maximum memory (mem = Math.max(mem_gpu, mem_gpu)) are:
+	// - GPU operator is not selected when mem_gpu < total memory available on GPU < mem
+	// - CP operator is not selected (i.e. distributed operator compiled) when mem_cpu < driver memory budget < mem
+	
+	/**
+	 * In memory-based optimizer mode (see OptimizerUtils.isMemoryBasedOptLevel()), 
+	 * the exectype is determined by checking this method as well as memory budget of this Hop. 
+	 * Please see findExecTypeByMemEstimate for more detail. 
+	 * 
+	 * This method is necessary because not all operator are supported efficiently
+	 * on GPU (for example: operations on frames and scalar as well as operations such as table). 
+	 * 
+	 * @return true if the Hop is eligible for GPU Exectype.
+	 */
+	public abstract boolean isGPUEnabled();
+	
+	/**
+	 * Computes the hop-specific output memory estimate in bytes. Should be 0 if not
+	 * applicable. 
+	 * 
+	 * @param dim1 dimension 1
+	 * @param dim2 dimension 2
+	 * @param nnz number of non-zeros
+	 * @return memory estimate
+	 */
+	protected abstract double computeOutputMemEstimate( long dim1, long dim2, long nnz );
+
+	/**
+	 * Computes the hop-specific intermediate memory estimate in bytes. Should be 0 if not
+	 * applicable.
+	 * 
+	 * @param dim1 dimension 1
+	 * @param dim2 dimension 2
+	 * @param nnz number of non-zeros
+	 * @return memory estimate
+	 */
+	protected abstract double computeIntermediateMemEstimate( long dim1, long dim2, long nnz );
+	
+	// ========================================================================================
+
+	
 	protected boolean isVector() {
 		return (dimsKnown() && (_dim1 == 1 || _dim2 == 1) );
 	}
@@ -955,6 +983,10 @@ public abstract class Hop
 		_dim2 = dim2;
 	}
 	
+	public long getLength() {
+		return _dim1 * _dim2;
+	}
+	
 	public double getSparsity() {
 		return OptimizerUtils.getSparsity(_dim1, _dim2, _nnz);
 	}
@@ -985,6 +1017,14 @@ public abstract class Hop
 	public void setDataType( DataType dt ) {
 		_dataType = dt;
 	}
+	
+	public boolean isScalar() {
+		return _dataType.isScalar();
+	}
+	
+	public boolean isMatrix() {
+		return _dataType.isMatrix();
+	}
 
 	public void setVisited() {
 		setVisited(true);
@@ -1014,6 +1054,7 @@ public abstract class Hop
 		NOT, ABS, SIN, COS, TAN, ASIN, ACOS, ATAN, SIGN, SQRT, LOG, EXP, 
 		CAST_AS_SCALAR, CAST_AS_MATRIX, CAST_AS_FRAME, CAST_AS_DOUBLE, CAST_AS_INT, CAST_AS_BOOLEAN,
 		PRINT, EIGEN, NROW, NCOL, LENGTH, ROUND, IQM, STOP, CEIL, FLOOR, MEDIAN, INVERSE, CHOLESKY,
+		SVD,
 		//cumulative sums, products, extreme values
 		CUMSUM, CUMPROD, CUMMIN, CUMMAX,
 		//fused ML-specific operators for performance 
@@ -1307,6 +1348,7 @@ public abstract class Hop
 		HopsOpOp12String.put(OpOp1.CAST_AS_SCALAR, "castAsScalar");
 		HopsOpOp12String.put(OpOp1.COS, "cos");
 		HopsOpOp12String.put(OpOp1.EIGEN, "eigen");
+		HopsOpOp12String.put(OpOp1.SVD, "svd");
 		HopsOpOp12String.put(OpOp1.EXP, "exp");
 		HopsOpOp12String.put(OpOp1.IQM, "iqm");
 		HopsOpOp12String.put(OpOp1.MEDIAN, "median");
@@ -1493,21 +1535,26 @@ public abstract class Hop
 	
 	/**
 	 * Marks the hop for dynamic recompilation, if dynamic recompilation is 
-	 * enabled and one of the two basic scenarios apply:
+	 * enabled and one of the three basic scenarios apply:
 	 * <ul>
 	 *  <li> The hop has unknown dimensions or sparsity and is scheduled for 
 	 *    remote execution, in which case the latency for distributed jobs easily 
 	 *    covers any recompilation overheads. </li>
 	 *  <li> The hop has unknown dimensions and is scheduled for local execution 
 	 *    due to forced single node execution type. </li>
+	 *  <li> The hop has unknown dimensions and is scheduled for local execution 
+	 *    due to good worst-case memory estimates but codegen is enabled, which
+	 *    requires (mostly) known sizes to validity conditions and cost estimation. </li>
 	 * <ul> <p>
 	 */
 	protected void setRequiresRecompileIfNecessary() {
 		ExecType REMOTE = OptimizerUtils.isSparkExecutionMode() ? ExecType.SPARK : ExecType.MR;
 		boolean caseRemote = (!dimsKnown(true) && _etype == REMOTE);
 		boolean caseLocal = (!dimsKnown() && _etypeForced == ExecType.CP);
+		boolean caseCodegen = (!dimsKnown() && ConfigurationManager.isCodegenEnabled());
 		
-		if( ConfigurationManager.isDynamicRecompilation() && (caseRemote || caseLocal) )
+		if( ConfigurationManager.isDynamicRecompilation() 
+			&& (caseRemote || caseLocal || caseCodegen) )
 			setRequiresRecompile();
 	}
 
@@ -1545,7 +1592,7 @@ public abstract class Hop
 		setDim2( size );
 	}
 
-	public long computeSizeInformation( Hop input )
+	public static long computeSizeInformation( Hop input )
 	{
 		long ret = -1;
 		
@@ -1808,26 +1855,21 @@ public abstract class Hop
 	public int _beginLine, _beginColumn;
 	public int _endLine, _endColumn;
 	public String _filename;
+	public String _text;
 	
 	public void setBeginLine(int passed)    { _beginLine = passed;   }
 	public void setBeginColumn(int passed) 	{ _beginColumn = passed; }
 	public void setEndLine(int passed) 		{ _endLine = passed;   }
 	public void setEndColumn(int passed)	{ _endColumn = passed; }
 	public void setFilename(String passed) { _filename = passed; }
-	
-	public void setAllPositions(String filename, int blp, int bcp, int elp, int ecp){
-		_filename = filename;
-		_beginLine	 = blp; 
-		_beginColumn = bcp; 
-		_endLine 	 = elp;
-		_endColumn 	 = ecp;
-	}
+	public void setText(String text) { _text = text; }
 
 	public int getBeginLine()	{ return _beginLine;   }
 	public int getBeginColumn() { return _beginColumn; }
 	public int getEndLine() 	{ return _endLine;   }
 	public int getEndColumn()	{ return _endColumn; }
 	public String getFilename()	{ return _filename; }
+	public String getText() { return _text; }
 	
 	public String printErrorLocation(){
 		if(_filename != null)
@@ -1845,5 +1887,24 @@ public abstract class Hop
 	{
 		lop.setAllPositions(this.getFilename(), this.getBeginLine(), this.getBeginColumn(), this.getEndLine(), this.getEndColumn());
 	}
-	
+
+	/**
+	 * Set parse information.
+	 *
+	 * @param parseInfo
+	 *            parse information, such as beginning line position, beginning
+	 *            column position, ending line position, ending column position,
+	 *            text, and filename
+	 * @param filename
+	 *            the DML/PYDML filename (if it exists)
+	 */
+	public void setParseInfo(ParseInfo parseInfo) {
+		_beginLine = parseInfo.getBeginLine();
+		_beginColumn = parseInfo.getBeginColumn();
+		_endLine = parseInfo.getEndLine();
+		_endColumn = parseInfo.getEndColumn();
+		_text = parseInfo.getText();
+		_filename = parseInfo.getFilename();
+	}
+
 } // end class

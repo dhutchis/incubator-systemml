@@ -1176,6 +1176,11 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 	 * @return number of non-zeros
 	 */
 	public long recomputeNonZeros() {
+		return recomputeNonZeros(null);
+	}
+	
+	public long recomputeNonZeros(String opcode) {
+		long t1 = opcode != null && DMLScript.STATISTICS && DMLScript.FINEGRAINED_STATISTICS ? System.nanoTime() : 0;
 		if( sparse && sparseBlock!=null ) { //SPARSE (max long)
 			//note: rlen might be <= sparseBlock.numRows()
 			nonZeros = sparseBlock.size(0, sparseBlock.numRows());
@@ -1187,6 +1192,10 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 			for(int i=0; i<limit; i++)
 				nnz += (a[i]!=0) ? 1 : 0;
 			nonZeros = nnz;
+		}
+		if(opcode != null && DMLScript.STATISTICS && DMLScript.FINEGRAINED_STATISTICS) {
+			long t2 = System.nanoTime();
+			GPUStatistics.maintainCPMiscTimes(opcode, CPInstruction.MISC_TIMER_RECOMPUTE_NNZ, t2-t1);
 		}
 		return nonZeros;
 	}
@@ -3781,7 +3790,7 @@ public class MatrixBlock extends MatrixValue implements CacheBlock, Externalizab
 	}
 	
 	/**
-	 * Method to perform rangeReIndex operation for a given lower and upper bounds in row and column dimensions.
+	 * Method to perform rightIndex operation for a given lower and upper bounds in row and column dimensions.
 	 * Extracted submatrix is returned as "result". Note: This operation is now 0-based.
 	 * 
 	 * @param rl row lower

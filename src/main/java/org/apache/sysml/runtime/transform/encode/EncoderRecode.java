@@ -33,9 +33,9 @@ import org.apache.wink.json4j.JSONException;
 import org.apache.wink.json4j.JSONObject;
 
 public class EncoderRecode extends Encoder 
-{	
+{
 	private static final long serialVersionUID = 8213163881283341874L;
-
+	
 	//recode maps and custom map for partial recode maps 
 	private HashMap<Integer, HashMap<String, Long>> _rcdMaps  = new HashMap<Integer, HashMap<String, Long>>();
 	private HashMap<Integer, HashSet<Object>> _rcdMapsPart = null;
@@ -59,6 +59,8 @@ public class EncoderRecode extends Encoder
 	}
 	
 	private long lookupRCDMap(int colID, String key) {
+		if( !_rcdMaps.containsKey(colID) )
+			return -1; //empty recode map
 		Long tmp = _rcdMaps.get(colID).get(key);
 		return (tmp!=null) ? tmp : -1;
 	}
@@ -78,7 +80,7 @@ public class EncoderRecode extends Encoder
 	@Override
 	public void build(FrameBlock in) {
 		if( !isApplicable() )
-			return;		
+			return;
 
 		Iterator<String[]> iter = in.getStringRowIterator(_colList);
 		while( iter.hasNext() ) {
@@ -130,7 +132,7 @@ public class EncoderRecode extends Encoder
 			for( int i=0; i<in.getNumRows(); i++ ) {
 				Object okey = in.get(i, colID-1);
 				String key = (okey!=null) ? okey.toString() : null;
-				long code = lookupRCDMap(colID, key);			
+				long code = lookupRCDMap(colID, key);
 				out.quickSetValue(i, colID-1,
 					(code >= 0) ? code : Double.NaN);
 			}

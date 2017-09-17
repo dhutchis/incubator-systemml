@@ -97,7 +97,7 @@ public class RewriteSplitDagDataDependentOperators extends StatementBlockRewrite
 				//duplicate sb incl live variable sets
 				StatementBlock sb1 = new StatementBlock();
 				sb1.setDMLProg(sb.getDMLProg());
-				sb1.setAllPositions(sb.getFilename(), sb.getBeginLine(), sb.getBeginColumn(), sb.getEndLine(), sb.getEndColumn());
+				sb1.setParseInfo(sb);
 				sb1.setLiveIn(new VariableSet());
 				sb1.setLiveOut(new VariableSet());
 				
@@ -369,7 +369,7 @@ public class RewriteSplitDagDataDependentOperators extends StatementBlockRewrite
 			//create additional cut by rewriting both hop dags 
 			int pos = HopRewriteUtils.getChildReferencePos(hop, c);
 			HopRewriteUtils.removeChildReferenceByPos(hop, c, pos);
-			HopRewriteUtils.addChildReference(hop, tread, pos);			
+			HopRewriteUtils.addChildReference(hop, tread, pos);
 		
 			//update live in and out of new statement block (for piggybacking)
 			DataIdentifier diVar = new DataIdentifier(varname);

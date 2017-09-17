@@ -32,6 +32,8 @@ import java.util.concurrent.Future;
 
 import org.apache.sysml.runtime.DMLRuntimeException;
 import org.apache.sysml.runtime.compress.BitmapEncoder;
+import org.apache.sysml.runtime.compress.ColGroup;
+import org.apache.sysml.runtime.compress.ColGroupValue;
 import org.apache.sysml.runtime.compress.CompressedMatrixBlock;
 import org.apache.sysml.runtime.functionobjects.Builtin;
 import org.apache.sysml.runtime.functionobjects.Builtin.BuiltinCode;
@@ -51,7 +53,6 @@ import org.apache.sysml.runtime.util.UtilFunctions;
 public abstract class SpoofCellwise extends SpoofOperator implements Serializable
 {
 	private static final long serialVersionUID = 3442528770573293590L;
-	private static final long PAR_NUMCELL_THRESHOLD = 1024*1024;   //Min 1M elements
 	
 	public enum CellType {
 		NO_AGG,
@@ -115,15 +116,16 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 		if( inputs==null || inputs.size() < 1  )
 			throw new RuntimeException("Invalid input arguments.");
 		
-		if( inputs.get(0).getNumRows()*inputs.get(0).getNumColumns()<PAR_NUMCELL_THRESHOLD ) {
+		if( getTotalInputNnz(inputs) < PAR_NUMCELL_THRESHOLD ) {
 			k = 1; //serial execution
 		}
 		
 		//input preparation
+		MatrixBlock a = inputs.get(0);
 		SideInput[] b = prepInputMatrices(inputs);
 		double[] scalars = prepInputScalars(scalarObjects);
-		final int m = inputs.get(0).getNumRows();
-		final int n = inputs.get(0).getNumColumns();
+		final int m = a.getNumRows();
+		final int n = a.getNumColumns();
 		
 		//sparse safe check
 		boolean sparseSafe = isSparseSafe() || (b.length == 0
@@ -133,21 +135,24 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 		if( k <= 1 ) //SINGLE-THREADED
 		{
 			if( inputs.get(0) instanceof CompressedMatrixBlock )
-				ret = executeCompressedAndAgg((CompressedMatrixBlock)inputs.get(0), b, scalars, m, n, sparseSafe, 0, m);
+				ret = executeCompressedAndAgg((CompressedMatrixBlock)a, b, scalars, m, n, sparseSafe, 0, m);
 			else if( !inputs.get(0).isInSparseFormat() )
-				ret = executeDenseAndAgg(inputs.get(0).getDenseBlock(), b, scalars, m, n, sparseSafe, 0, m);
+				ret = executeDenseAndAgg(a.getDenseBlock(), b, scalars, m, n, sparseSafe, 0, m);
 			else
-				ret = executeSparseAndAgg(inputs.get(0).getSparseBlock(), b, scalars, m, n, sparseSafe, 0, m);
+				ret = executeSparseAndAgg(a.getSparseBlock(), b, scalars, m, n, sparseSafe, 0, m);
 		}
 		else  //MULTI-THREADED
 		{
 			try {
 				ExecutorService pool = Executors.newFixedThreadPool( k );
 				ArrayList<ParAggTask> tasks = new ArrayList<ParAggTask>();
-				int nk = UtilFunctions.roundToNext(Math.min(8*k,m/32), k);
+				int nk = (a instanceof CompressedMatrixBlock) ? k :
+					UtilFunctions.roundToNext(Math.min(8*k,m/32), k);
 				int blklen = (int)(Math.ceil((double)m/nk));
+				if( a instanceof CompressedMatrixBlock )
+					blklen = BitmapEncoder.getAlignedBlocksize(blklen);
 				for( int i=0; i<nk & i*blklen<m; i++ )
-					tasks.add(new ParAggTask(inputs.get(0), b, scalars, m, n, sparseSafe, i*blklen, Math.min((i+1)*blklen, m)));
+					tasks.add(new ParAggTask(a, b, scalars, m, n, sparseSafe, i*blklen, Math.min((i+1)*blklen, m)));
 				//execute tasks
 				List<Future<Double>> taskret = pool.invokeAll(tasks);
 				pool.shutdown();
@@ -173,28 +178,28 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 		
 		//correction for min/max
 		if( (_aggOp == AggOp.MIN || _aggOp == AggOp.MAX) && sparseSafe 
-			&& inputs.get(0).getNonZeros()<inputs.get(0).getNumRows()*inputs.get(0).getNumColumns() )
+			&& a.getNonZeros()<a.getNumRows()*a.getNumColumns() )
 			ret = getAggFunction().execute(ret, 0); //unseen 0 might be max or min value
 		
 		return new DoubleObject(ret);
 	}
 
 	@Override
-	public void execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out)
+	public MatrixBlock execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out)
 		throws DMLRuntimeException
 	{
-		execute(inputs, scalarObjects, out, 1);
+		return execute(inputs, scalarObjects, out, 1);
 	}
 	
 	@Override
-	public void execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out, int k)
+	public MatrixBlock execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out, int k)
 		throws DMLRuntimeException
 	{
 		//sanity check
 		if( inputs==null || inputs.size() < 1 || out==null )
 			throw new RuntimeException("Invalid input arguments.");
 		
-		if( inputs.get(0).getNumRows()*inputs.get(0).getNumColumns()<PAR_NUMCELL_THRESHOLD ) {
+		if( getTotalInputNnz(inputs) < PAR_NUMCELL_THRESHOLD ) {
 			k = 1; //serial execution
 		}
 		
@@ -237,8 +242,7 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 				ArrayList<ParExecTask> tasks = new ArrayList<ParExecTask>();
 				int nk = UtilFunctions.roundToNext(Math.min(8*k,m/32), k);
 				int blklen = (int)(Math.ceil((double)m/nk));
-				if( a instanceof CompressedMatrixBlock && sparseOut
-					&& k/2*BitmapEncoder.BITMAP_BLOCK_SZ < m)
+				if( a instanceof CompressedMatrixBlock )
 					blklen = BitmapEncoder.getAlignedBlocksize(blklen);
 				for( int i=0; i<nk & i*blklen<m; i++ )
 					tasks.add(new ParExecTask(a, b, scalars, out, m, n,
@@ -276,6 +280,7 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 		//post-processing
 		out.setNonZeros(lnnz);
 		out.examSparsity();
+		return out;
 	}
 	
 	/////////
@@ -721,10 +726,10 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 					//process zeros before current non-zero
 					if( !sparseSafe )
 						for(int j=lastj+1; j<aix[k]; j++) {
-							kbuff.set(c[aix[j]], corr[aix[j]]);
+							kbuff.set(c[j], corr[j]);
 							kplus.execute2(kbuff, genexec(0, b, scalars, m, n, i, j));
-							c[aix[j]] = kbuff._sum;
-							corr[aix[j]] = kbuff._correction;
+							c[j] = kbuff._sum;
+							corr[j] = kbuff._correction;
 						}
 					//process current non-zero
 					lastj = aix[k];
@@ -770,8 +775,8 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 					//process zeros before current non-zero
 					if( !sparseSafe )
 						for(int j=lastj+1; j<aix[k]; j++) {
-							c[aix[j]] = vfun.execute(c[aix[j]], genexec(0, b, scalars, m, n, i, j));
-							count[aix[j]] ++;
+							c[j] = vfun.execute(c[j], genexec(0, b, scalars, m, n, i, j));
+							count[j] ++;
 						}
 					//process current non-zero
 					lastj = aix[k];
@@ -973,12 +978,32 @@ public abstract class SpoofCellwise extends SpoofOperator implements Serializabl
 	{
 		KahanFunction kplus = (KahanFunction) getAggFunction();
 		KahanObject kbuff = new KahanObject(0, 0);
+		KahanObject kbuff2 = new KahanObject(0, 0);
 		
-		Iterator<IJV> iter = a.getIterator(rl, ru, !sparseSafe);
-		while( iter.hasNext() ) {
-			IJV cell = iter.next();
-			double val = genexec(cell.getV(), b, scalars, m, n, cell.getI(), cell.getJ());
-			kplus.execute2(kbuff, val);
+		//special case: computation over value-tuples only
+		if( sparseSafe && b.length==0 && !a.hasUncompressedColGroup() ) {
+			//note: all remaining groups are guaranteed ColGroupValue
+			boolean entireGrp = (rl==0 && ru==a.getNumRows());
+			for( ColGroup grp : a.getColGroups() ) {
+				ColGroupValue grpv = (ColGroupValue) grp;
+				int[] counts = entireGrp ? 
+					grpv.getCounts() : grpv.getCounts(rl, ru);
+				for(int k=0; k<grpv.getNumValues(); k++) {
+					kbuff2.set(0, 0);
+					double in = grpv.sumValues(k, kplus, kbuff2);
+					double out = genexec(in, b, scalars, m, n, -1, -1);
+					kplus.execute3(kbuff, out, counts[k]);
+				}
+			}
+		}
+		//general case of arbitrary side inputs 
+		else {
+			Iterator<IJV> iter = a.getIterator(rl, ru, !sparseSafe);
+			while( iter.hasNext() ) {
+				IJV cell = iter.next();
+				double val = genexec(cell.getV(), b, scalars, m, n, cell.getI(), cell.getJ());
+				kplus.execute2(kbuff, val);
+			}
 		}
 		return kbuff._sum;
 	}

@@ -31,15 +31,13 @@ import org.apache.sysml.runtime.matrix.data.LibCommonsMath;
 import org.apache.sysml.runtime.matrix.data.MatrixBlock;
 import org.apache.sysml.runtime.matrix.operators.Operator;
 
+public class MultiReturnBuiltinCPInstruction extends ComputationCPInstruction {
 
-public class MultiReturnBuiltinCPInstruction extends ComputationCPInstruction 
-{
-	
 	int arity;
 	protected ArrayList<CPOperand> _outputs;
-	
-	public MultiReturnBuiltinCPInstruction(Operator op, CPOperand input1, ArrayList<CPOperand> outputs, String opcode, String istr )
-	{
+
+	private MultiReturnBuiltinCPInstruction(Operator op, CPOperand input1, ArrayList<CPOperand> outputs, String opcode,
+			String istr) {
 		super(op, input1, null, outputs.get(0), opcode, istr);
 		_cptype = CPINSTRUCTION_TYPE.MultiReturnBuiltin;
 		_outputs = outputs;
@@ -89,6 +87,17 @@ public class MultiReturnBuiltinCPInstruction extends ComputationCPInstruction
 			
 			return new MultiReturnBuiltinCPInstruction(null, in1, outputs, opcode, str);
 			
+		}
+		else if ( opcode.equalsIgnoreCase("svd") ) {
+			CPOperand in1 = new CPOperand(parts[1]);
+
+			// one input and three outputs
+			outputs.add ( new CPOperand(parts[2], ValueType.DOUBLE, DataType.MATRIX) );
+			outputs.add ( new CPOperand(parts[3], ValueType.DOUBLE, DataType.MATRIX) );
+			outputs.add ( new CPOperand(parts[4], ValueType.DOUBLE, DataType.MATRIX) );
+			
+			return new MultiReturnBuiltinCPInstruction(null, in1, outputs, opcode, str);
+
 		}
 		else {
 			throw new DMLRuntimeException("Invalid opcode in MultiReturnBuiltin instruction: " + opcode);

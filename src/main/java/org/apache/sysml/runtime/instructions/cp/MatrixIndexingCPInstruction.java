@@ -20,6 +20,8 @@
 package org.apache.sysml.runtime.instructions.cp;
 
 import org.apache.sysml.api.DMLScript;
+import org.apache.sysml.lops.LeftIndex;
+import org.apache.sysml.lops.RightIndex;
 import org.apache.sysml.parser.Expression.DataType;
 import org.apache.sysml.parser.Expression.ValueType;
 import org.apache.sysml.runtime.DMLRuntimeException;
@@ -31,16 +33,18 @@ import org.apache.sysml.runtime.matrix.operators.Operator;
 import org.apache.sysml.runtime.util.IndexRange;
 import org.apache.sysml.utils.Statistics;
 
-public final class MatrixIndexingCPInstruction extends IndexingCPInstruction
-{	
-	public MatrixIndexingCPInstruction(Operator op, CPOperand in, CPOperand rl, CPOperand ru, CPOperand cl, CPOperand cu, CPOperand out, String opcode, String istr){
+public final class MatrixIndexingCPInstruction extends IndexingCPInstruction {
+
+	protected MatrixIndexingCPInstruction(Operator op, CPOperand in, CPOperand rl, CPOperand ru, CPOperand cl,
+			CPOperand cu, CPOperand out, String opcode, String istr) {
 		super(op, in, rl, ru, cl, cu, out, opcode, istr);
 	}
-	
-	public MatrixIndexingCPInstruction(Operator op, CPOperand lhsInput, CPOperand rhsInput, CPOperand rl, CPOperand ru, CPOperand cl, CPOperand cu, CPOperand out, String opcode, String istr){
+
+	protected MatrixIndexingCPInstruction(Operator op, CPOperand lhsInput, CPOperand rhsInput, CPOperand rl,
+			CPOperand ru, CPOperand cl, CPOperand cu, CPOperand out, String opcode, String istr) {
 		super(op, lhsInput, rhsInput, rl, ru, cl, cu, out, opcode, istr);
 	}
-	
+
 	@Override
 	public void processInstruction(ExecutionContext ec)
 			throws DMLRuntimeException 
@@ -52,7 +56,7 @@ public final class MatrixIndexingCPInstruction extends IndexingCPInstruction
 		MatrixObject mo = ec.getMatrixObject(input1.getName());
 		
 		//right indexing
-		if( opcode.equalsIgnoreCase("rangeReIndex") )
+		if( opcode.equalsIgnoreCase(RightIndex.OPCODE) )
 		{
 			MatrixBlock resultBlock = null;
 			
@@ -76,7 +80,7 @@ public final class MatrixIndexingCPInstruction extends IndexingCPInstruction
 			ec.setMatrixOutput(output.getName(), resultBlock, getExtendedOpcode());
 		}
 		//left indexing
-		else if ( opcode.equalsIgnoreCase("leftIndex"))
+		else if ( opcode.equalsIgnoreCase(LeftIndex.OPCODE))
 		{
 			UpdateType updateType = mo.getUpdateType();
 			if(DMLScript.STATISTICS)

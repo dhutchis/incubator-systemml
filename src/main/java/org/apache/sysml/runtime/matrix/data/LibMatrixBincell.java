@@ -321,8 +321,6 @@ public class LibMatrixBincell
 				
 				if( m1.sparse ) //SPARSE left
 				{
-					Arrays.fill(ret.denseBlock, 0, ret.denseBlock.length, 0); 
-					
 					if( m1.sparseBlock != null )
 					{
 						SparseBlock a = m1.sparseBlock;
@@ -349,6 +347,7 @@ public class LibMatrixBincell
 				}
 				
 				//2) process right input: op.fn (+,-,*), * only if dense
+				long lnnz = 0;
 				if( m2.sparse ) //SPARSE right
 				{				
 					if(m2.sparseBlock!=null)
@@ -364,20 +363,26 @@ public class LibMatrixBincell
 								for(int k = apos; k < apos+alen; k++) 
 									c[ix+aix[k]] = op.fn.execute(c[ix+aix[k]], avals[k]);
 							}
-						}	
+							//exploit temporal locality of rows
+							lnnz += ret.recomputeNonZeros(i, i, 0, clen-1);
+						}
 					}
 				}
 				else //DENSE right
 				{
-					if( !m2.isEmptyBlock(false) )
-						for( int i=0; i<m*n; i++ )
-							c[i] = op.fn.execute(c[i], m2.denseBlock[i]);
+					if( !m2.isEmptyBlock(false) ) {
+						double[] a = m2.denseBlock;
+						for( int i=0; i<m*n; i++ ) {
+							c[i] = op.fn.execute(c[i], a[i]);
+							lnnz += (c[i]!=0) ? 1 : 0;
+						}
+					}
 					else if(op.fn instanceof Multiply)
 						Arrays.fill(ret.denseBlock, 0, m*n, 0); 
 				}
-	
+				
 				//3) recompute nnz
-				ret.recomputeNonZeros();
+				ret.setNonZeros(lnnz);
 			}
 			else if( !ret.sparse && !m1.sparse && !m2.sparse 
 					&& m1.denseBlock!=null && m2.denseBlock!=null )
@@ -391,12 +396,12 @@ public class LibMatrixBincell
 				ValueFunction fn = op.fn;
 				
 				//compute dense-dense binary, maintain nnz on-the-fly
-				int nnz = 0;
+				int lnnz = 0;
 				for( int i=0; i<m*n; i++ ) {
 					c[i] = fn.execute(a[i], b[i]);
-					nnz += (c[i]!=0)? 1 : 0;
+					lnnz += (c[i]!=0)? 1 : 0;
 				}
-				ret.nonZeros = nnz;
+				ret.setNonZeros(lnnz);
 			}
 			else if( skipEmpty && (m1.sparse || m2.sparse) ) 
 			{
@@ -1184,52 +1189,51 @@ public class LibMatrixBincell
 		}
 	}
 	
-	/**
-	 * like a merge sort
-	 * 
-	 * @param op binary operator
-	 * @param values1 array of double values
-	 * @param cols1 ?
-	 * @param pos1 ?
-	 * @param size1 ?
-	 * @param values2 array of double values
-	 * @param cols2 ?
-	 * @param pos2 ?
-	 * @param size2 ?
-	 * @param resultRow ?
-	 * @param result matrix block
-	 * @throws DMLRuntimeException if DMLRuntimeException occurs
-	 */
 	private static void mergeForSparseBinary(BinaryOperator op, double[] values1, int[] cols1, int pos1, int size1, 
-				double[] values2, int[] cols2, int pos2, int size2, int resultRow, MatrixBlock result) 
+			double[] values2, int[] cols2, int pos2, int size2, int resultRow, MatrixBlock result) 
 		throws DMLRuntimeException
 	{
-		int p1=0, p2=0, column;
-		while( p1<size1 && p2< size2 )
-		{
-			double value = 0;
-			if(cols1[pos1+p1]<cols2[pos2+p2]) {
-				value = op.fn.execute(values1[pos1+p1], 0);
-				column = cols1[pos1+p1];
-				p1++;
+		int p1 = 0, p2 = 0;
+		if( op.fn instanceof Multiply ) { //skip empty
+			//skip empty: merge-join (with inner join semantics)
+			//similar to sorted list intersection
+			SparseBlock sblock = result.getSparseBlock();
+			sblock.allocate(resultRow, Math.min(size1, size2), result.clen);
+			while( p1 < size1 && p2 < size2 ) {
+				int colPos1 = cols1[pos1+p1];
+				int colPos2 = cols2[pos2+p2];
+				if( colPos1 == colPos2 )
+					sblock.append(resultRow, colPos1,
+						op.fn.execute(values1[pos1+p1], values2[pos2+p2]));
+				p1 += (colPos1 <= colPos2) ? 1 : 0;
+				p2 += (colPos1 >= colPos2) ? 1 : 0;
 			}
-			else if(cols1[pos1+p1]==cols2[pos2+p2]) {
-				value = op.fn.execute(values1[pos1+p1], values2[pos2+p2]);
-				column = cols1[pos1+p1];
-				p1++;
-				p2++;
-			}
-			else {
-				value = op.fn.execute(0, values2[pos2+p2]);
-				column = cols2[pos2+p2];
-				p2++;
-			}
-			result.appendValue(resultRow, column, value);	
+			result.nonZeros += sblock.size(resultRow);
 		}
-		
-		//add left over
-		appendLeftForSparseBinary(op, values1, cols1, pos1, size1, p1, resultRow, result);
-		appendRightForSparseBinary(op, values2, cols2, pos2, size2, p2, resultRow, result);
+		else {
+			//general case: merge-join (with outer join semantics) 
+			while( p1 < size1 && p2 < size2 ) {
+				if(cols1[pos1+p1]<cols2[pos2+p2]) {
+					result.appendValue(resultRow, cols1[pos1+p1], 
+						op.fn.execute(values1[pos1+p1], 0));
+					p1++;
+				}
+				else if(cols1[pos1+p1]==cols2[pos2+p2]) {
+					result.appendValue(resultRow, cols1[pos1+p1], 
+						op.fn.execute(values1[pos1+p1], values2[pos2+p2]));
+					p1++;
+					p2++;
+				}
+				else {
+					result.appendValue(resultRow, cols2[pos2+p2], 
+						op.fn.execute(0, values2[pos2+p2]));
+					p2++;
+				}
+			}
+			//add left over
+			appendLeftForSparseBinary(op, values1, cols1, pos1, size1, p1, resultRow, result);
+			appendRightForSparseBinary(op, values2, cols2, pos2, size2, p2, resultRow, result);
+		}
 	}
 
 	private static void appendLeftForSparseBinary(BinaryOperator op, double[] values1, int[] cols1, int pos1, int size1, 

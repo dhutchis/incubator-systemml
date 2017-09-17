@@ -40,8 +40,10 @@ import org.apache.sysml.lops.Checkpoint;
 import org.apache.sysml.lops.Lop;
 import org.apache.sysml.lops.LopProperties.ExecType;
 import org.apache.sysml.lops.compile.Dag;
+import org.apache.sysml.parser.ForStatementBlock;
 import org.apache.sysml.parser.Expression.ValueType;
 import org.apache.sysml.runtime.DMLRuntimeException;
+import org.apache.sysml.runtime.controlprogram.ForProgramBlock;
 import org.apache.sysml.runtime.controlprogram.LocalVariableMap;
 import org.apache.sysml.runtime.controlprogram.context.SparkExecutionContext;
 import org.apache.sysml.runtime.controlprogram.parfor.ProgramConverter;
@@ -1013,15 +1015,17 @@ public class OptimizerUtils
 		return ( op==OpOp2.NOTEQUAL && val==0);
 	}
 
-	public static double getBinaryOpSparsityConditionalSparseSafe( double sp1, OpOp2 op, LiteralOp lit )
-	{
+	public static boolean isBinaryOpSparsityConditionalSparseSafe( OpOp2 op, LiteralOp lit ) {
 		double val = HopRewriteUtils.getDoubleValueSafe(lit);
-		
 		return (  (op==OpOp2.GREATER  && val==0) 
 				||(op==OpOp2.LESS     && val==0)
 				||(op==OpOp2.NOTEQUAL && val==0)
 				||(op==OpOp2.EQUAL    && val!=0)
-				||(op==OpOp2.MINUS    && val==0)) ? sp1 : 1.0;
+				||(op==OpOp2.MINUS    && val==0));
+	}
+	
+	public static double getBinaryOpSparsityConditionalSparseSafe( double sp1, OpOp2 op, LiteralOp lit ) {
+		return isBinaryOpSparsityConditionalSparseSafe(op, lit) ? sp1 : 1.0;
 	}
 	
 	/**
@@ -1126,7 +1130,39 @@ public class OptimizerUtils
 		return String.format("%.0f", inB/(1024*1024) );
 	}
 	
-
+	public static long getNumIterations(ForProgramBlock fpb, long defaultValue) {
+		if( fpb.getStatementBlock()==null )
+			return defaultValue;
+		ForStatementBlock fsb = (ForStatementBlock) fpb.getStatementBlock();
+		try {
+			HashMap<Long,Long> memo = new HashMap<Long,Long>();
+			long from = rEvalSimpleLongExpression(fsb.getFromHops().getInput().get(0), memo);
+			long to = rEvalSimpleLongExpression(fsb.getToHops().getInput().get(0), memo);
+			long increment = (fsb.getIncrementHops()==null) ? (from < to) ? 1 : -1 : 
+				rEvalSimpleLongExpression(fsb.getIncrementHops().getInput().get(0), memo);
+			if( from != Long.MAX_VALUE && to != Long.MAX_VALUE && increment != Long.MAX_VALUE )
+				return (int)Math.ceil(((double)(to-from+1))/increment);
+		}
+		catch(Exception ex){}
+		return defaultValue;
+	}
+	
+	public static long getNumIterations(ForProgramBlock fpb, LocalVariableMap vars, long defaultValue) {
+		if( fpb.getStatementBlock()==null )
+			return defaultValue;
+		ForStatementBlock fsb = (ForStatementBlock) fpb.getStatementBlock();
+		try {
+			HashMap<Long,Long> memo = new HashMap<Long,Long>();
+			long from = rEvalSimpleLongExpression(fsb.getFromHops().getInput().get(0), memo, vars);
+			long to = rEvalSimpleLongExpression(fsb.getToHops().getInput().get(0), memo, vars);
+			long increment = (fsb.getIncrementHops()==null) ? (from < to) ? 1 : -1 : 
+				rEvalSimpleLongExpression(fsb.getIncrementHops().getInput().get(0), memo);
+			if( from != Long.MAX_VALUE && to != Long.MAX_VALUE && increment != Long.MAX_VALUE )
+				return (int)Math.ceil(((double)(to-from+1))/increment);
+		}
+		catch(Exception ex){}
+		return defaultValue;
+	}
 	
 	/**
 	 * Function to evaluate simple size expressions over literals and now/ncol.

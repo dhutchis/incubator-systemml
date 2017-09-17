@@ -27,6 +27,7 @@ import org.junit.runners.Suite;
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
 	AlgorithmARIMA.class,
+	AlgorithmAutoEncoder.class,
 	AlgorithmGLM.class,
 	AlgorithmKMeans.class,
 	AlgorithmL2SVM.class,
@@ -41,6 +42,7 @@ import org.junit.runners.Suite;
 	CompressedMultiAggregateTest.class,
 	CompressedOuterProductTest.class,
 	CompressedRowAggregateTest.class,
+	CompressedRowAggregateLargeTest.class,
 	CPlanComparisonTest.class,
 	CPlanVectorPrimitivesTest.class,
 	DAGCellwiseTmplTest.class,

@@ -24,7 +24,9 @@ import java.util.HashMap;
 
 import org.apache.sysml.lops.Append;
 import org.apache.sysml.lops.DataGen;
+import org.apache.sysml.lops.LeftIndex;
 import org.apache.sysml.lops.LopProperties.ExecType;
+import org.apache.sysml.lops.RightIndex;
 import org.apache.sysml.lops.UnaryCP;
 import org.apache.sysml.runtime.DMLRuntimeException;
 import org.apache.sysml.runtime.instructions.cp.AggregateBinaryCPInstruction;
@@ -257,8 +259,8 @@ public class CPInstructionParser extends InstructionParser
 		String2CPInstructionType.put( "qpick"  , CPINSTRUCTION_TYPE.QPick);
 		
 		
-		String2CPInstructionType.put( "rangeReIndex", CPINSTRUCTION_TYPE.MatrixIndexing);
-		String2CPInstructionType.put( "leftIndex"   , CPINSTRUCTION_TYPE.MatrixIndexing);
+		String2CPInstructionType.put( RightIndex.OPCODE, CPINSTRUCTION_TYPE.MatrixIndexing);
+		String2CPInstructionType.put( LeftIndex.OPCODE, CPINSTRUCTION_TYPE.MatrixIndexing);
 	
 		String2CPInstructionType.put( "tsmm"   , CPINSTRUCTION_TYPE.MMTSJ);
 		String2CPInstructionType.put( "pmm"   , CPINSTRUCTION_TYPE.PMMJ);
@@ -267,10 +269,12 @@ public class CPInstructionParser extends InstructionParser
 		String2CPInstructionType.put( "qr",    CPINSTRUCTION_TYPE.MultiReturnBuiltin);
 		String2CPInstructionType.put( "lu",    CPINSTRUCTION_TYPE.MultiReturnBuiltin);
 		String2CPInstructionType.put( "eigen", CPINSTRUCTION_TYPE.MultiReturnBuiltin);
-		
+		String2CPInstructionType.put( "svd", 	 CPINSTRUCTION_TYPE.MultiReturnBuiltin);
+
 		String2CPInstructionType.put( "partition", 	CPINSTRUCTION_TYPE.Partition);
 		String2CPInstructionType.put( "compress", 	CPINSTRUCTION_TYPE.Compression);
 		String2CPInstructionType.put( "spoof", 		CPINSTRUCTION_TYPE.SpoofFused);
+
 		
 		//CP FILE instruction
 		String2CPFileInstructionType = new HashMap<String, CPINSTRUCTION_TYPE>();

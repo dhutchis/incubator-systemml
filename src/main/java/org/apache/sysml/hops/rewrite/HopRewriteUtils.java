@@ -47,6 +47,7 @@ import org.apache.sysml.hops.IndexingOp;
 import org.apache.sysml.hops.LeftIndexingOp;
 import org.apache.sysml.hops.LiteralOp;
 import org.apache.sysml.hops.MemoTable;
+import org.apache.sysml.hops.OptimizerUtils;
 import org.apache.sysml.hops.ParameterizedBuiltinOp;
 import org.apache.sysml.hops.ReorgOp;
 import org.apache.sysml.hops.TernaryOp;
@@ -54,7 +55,12 @@ import org.apache.sysml.hops.UnaryOp;
 import org.apache.sysml.hops.Hop.OpOp1;
 import org.apache.sysml.parser.DataExpression;
 import org.apache.sysml.parser.DataIdentifier;
+import org.apache.sysml.parser.ForStatementBlock;
+import org.apache.sysml.parser.FunctionStatementBlock;
+import org.apache.sysml.parser.IfStatementBlock;
 import org.apache.sysml.parser.Statement;
+import org.apache.sysml.parser.StatementBlock;
+import org.apache.sysml.parser.WhileStatementBlock;
 import org.apache.sysml.parser.Expression.DataType;
 import org.apache.sysml.parser.Expression.ValueType;
 import org.apache.sysml.runtime.instructions.cp.ScalarObject;
@@ -279,6 +285,13 @@ public class HopRewriteUtils
 		for( Hop input : inputs )
 			if( input.getParent().isEmpty() )
 				removeAllChildReferences(input);
+	}
+	
+	public static Hop getOtherInput(Hop hop, Hop input) {
+		for( Hop c : hop.getInput() )
+			if( c != input )
+				return c;
+		return null;
 	}
 	
 	public static Hop createDataGenOp( Hop input, double value ) 
@@ -656,11 +669,11 @@ public class HopRewriteUtils
 		hnew.setOutputBlocksizes(hold.getRowsInBlock(), hold.getColsInBlock());
 		hnew.refreshSizeInformation();
 	}
-	
-	public static void copyLineNumbers( Hop src, Hop dest ) {
-		dest.setAllPositions(src.getFilename(), src.getBeginLine(), src.getBeginColumn(), src.getEndLine(), src.getEndColumn());
+
+	public static void copyLineNumbers(Hop src, Hop dest) {
+		dest.setParseInfo(src);
 	}
-	
+
 	public static void updateHopCharacteristics( Hop hop, long brlen, long bclen, Hop src )
 	{
 		updateHopCharacteristics(hop, brlen, bclen, new MemoTable(), src);
@@ -822,6 +835,18 @@ public class HopRewriteUtils
 	
 	public static boolean isBinary(Hop hop, OpOp2 type, int maxParents) {
 		return isBinary(hop, type) && hop.getParent().size() <= maxParents;
+	}
+	
+	public static boolean isBinarySparseSafe(Hop hop) {
+		if( !(hop instanceof BinaryOp) )
+			return false;
+		if( isBinary(hop, OpOp2.MULT) )
+			return true;
+		BinaryOp bop = (BinaryOp) hop;
+		Hop lit = bop.getInput().get(0) instanceof LiteralOp ? bop.getInput().get(0) :
+			bop.getInput().get(1) instanceof LiteralOp ? bop.getInput().get(1) : null;
+		return lit != null && OptimizerUtils
+			.isBinaryOpSparsityConditionalSparseSafe(bop.getOp(), (LiteralOp)lit);
 	}
 	
 	public static boolean isBinaryMatrixScalarOperation(Hop hop) {
@@ -1027,11 +1052,18 @@ public class HopRewriteUtils
 		return ret;
 	}
 	
-	public static boolean alwaysRequiresReblock(Hop hop)
-	{
-		return (    hop instanceof DataOp 
-				 && ((DataOp)hop).getDataOpType()==DataOpTypes.PERSISTENTREAD
-				 && ((DataOp)hop).getInputFormatType()!=FileFormatTypes.BINARY);
+	public static boolean alwaysRequiresReblock(Hop hop) {
+		return (hop instanceof DataOp
+			&& ((DataOp)hop).getDataOpType()==DataOpTypes.PERSISTENTREAD
+			 && ((DataOp)hop).getInputFormatType()!=FileFormatTypes.BINARY);
+	}
+	
+	public static boolean containsOp(ArrayList<Hop> candidates, Class<? extends Hop> clazz) {
+		if( candidates != null )
+			for( Hop cand : candidates )
+				if( cand.getClass().equals(clazz) )
+					return true;
+		return false;
 	}
 	
 	public static boolean rHasSimpleReadChain(Hop root, String var)
@@ -1121,8 +1153,7 @@ public class HopRewriteUtils
 	
 	/**
 	 * Compares the size of outputs from hop1 and hop2, in terms of number
-	 * of matrix cells. Note that this methods throws a RuntimeException
-	 * if either hop has unknown dimensions. 
+	 * of matrix cells. 
 	 * 
 	 * @param hop1 high-level operator 1
 	 * @param hop2 high-level operator 2
@@ -1132,5 +1163,12 @@ public class HopRewriteUtils
 		long size1 = hop1.getDim1() * hop1.getDim2();
 		long size2 = hop2.getDim1() * hop2.getDim2();
 		return Long.compare(size1, size2);
+	}
+	
+	public static boolean isLastLevelStatementBlock(StatementBlock sb) {
+		return !(sb instanceof FunctionStatementBlock 
+			|| sb instanceof WhileStatementBlock
+			|| sb instanceof IfStatementBlock
+			|| sb instanceof ForStatementBlock); //incl parfor
 	}
 }

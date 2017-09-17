@@ -29,10 +29,12 @@ import java.util.concurrent.Future;
 import java.util.stream.IntStream;
 
 import org.apache.sysml.runtime.DMLRuntimeException;
+import org.apache.sysml.runtime.compress.BitmapEncoder;
 import org.apache.sysml.runtime.compress.CompressedMatrixBlock;
 import org.apache.sysml.runtime.instructions.cp.DoubleObject;
 import org.apache.sysml.runtime.instructions.cp.ScalarObject;
 import org.apache.sysml.runtime.matrix.data.LibMatrixMult;
+import org.apache.sysml.runtime.matrix.data.LibMatrixReorg;
 import org.apache.sysml.runtime.matrix.data.MatrixBlock;
 import org.apache.sysml.runtime.matrix.data.SparseBlock;
 import org.apache.sysml.runtime.matrix.data.SparseRow;
@@ -43,7 +45,6 @@ import org.apache.sysml.runtime.util.UtilFunctions;
 public abstract class SpoofRowwise extends SpoofOperator
 {
 	private static final long serialVersionUID = 6242910797139642998L;
-	private static final long PAR_NUMCELL_THRESHOLD = 1024*1024;   //Min 1M elements
 	
 	public enum RowType {
 		NO_AGG,    //no aggregation
@@ -61,6 +62,9 @@ public abstract class SpoofRowwise extends SpoofOperator
 		}
 		public boolean isRowTypeB1() {
 			return (this == NO_AGG_B1) || (this == COL_AGG_B1) || (this == COL_AGG_B1_T);
+		}
+		public boolean isRowTypeB1ColumnAgg() {
+			return (this == COL_AGG_B1) || (this == COL_AGG_B1_T);
 		} 
 	}
 	
@@ -97,22 +101,20 @@ public abstract class SpoofRowwise extends SpoofOperator
 	public ScalarObject execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, int k) 
 		throws DMLRuntimeException 
 	{
-		MatrixBlock out = new MatrixBlock(1, 1, false);
-		if( k > 1 )
-			execute(inputs, scalarObjects, out, k);
-		else
-			execute(inputs, scalarObjects, out);
+		MatrixBlock out = ( k > 1 ) ?
+			execute(inputs, scalarObjects, new MatrixBlock(1,1,false), k) :
+			execute(inputs, scalarObjects, new MatrixBlock(1,1,false));
 		return new DoubleObject(out.quickGetValue(0, 0));
 	}
 	
 	@Override
-	public void execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out)	
+	public MatrixBlock execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out)	
 		throws DMLRuntimeException 
 	{
-		execute(inputs, scalarObjects, out, true, false);
+		return execute(inputs, scalarObjects, out, true, false);
 	}
 	
-	public void execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out, boolean allocTmp, boolean aggIncr) 
+	public MatrixBlock execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out, boolean allocTmp, boolean aggIncr) 
 		throws DMLRuntimeException	
 	{
 		//sanity check
@@ -127,6 +129,8 @@ public abstract class SpoofRowwise extends SpoofOperator
 		if( !aggIncr || !out.isAllocated() )
 			allocateOutputMatrix(m, n, n2, out);
 		double[] c = out.getDenseBlock();
+		final boolean flipOut = _type.isRowTypeB1ColumnAgg()
+			&& LibSpoofPrimitives.isFlipOuter(out.getNumRows(), out.getNumColumns());
 		
 		//input preparation
 		SideInput[] b = prepInputMatrices(inputs, 1, inputs.size()-1, true, _tB1);
@@ -149,18 +153,23 @@ public abstract class SpoofRowwise extends SpoofOperator
 		if( allocTmp &&_reqVectMem > 0 )
 			LibSpoofPrimitives.cleanupThreadLocalMemory();
 		out.recomputeNonZeros();
+		if( flipOut ) {
+			fixTransposeDimensions(out);
+			out = LibMatrixReorg.transpose(out, new MatrixBlock(
+				out.getNumColumns(), out.getNumRows(), false));
+		}
 		out.examSparsity();
+		return out;
 	}
 	
 	@Override
-	public void execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out, int k)	
+	public MatrixBlock execute(ArrayList<MatrixBlock> inputs, ArrayList<ScalarObject> scalarObjects, MatrixBlock out, int k)	
 		throws DMLRuntimeException
 	{
 		//redirect to serial execution
 		if( k <= 1 || (_type.isColumnAgg() && !LibMatrixMult.checkParColumnAgg(inputs.get(0), k, false))
-			|| (long)inputs.get(0).getNumRows()*inputs.get(0).getNumColumns()<PAR_NUMCELL_THRESHOLD ) {
-			execute(inputs, scalarObjects, out);
-			return;
+			|| getTotalInputNnz(inputs) < PAR_NUMCELL_THRESHOLD ) {
+			return execute(inputs, scalarObjects, out);
 		}
 		
 		//sanity check
@@ -173,22 +182,29 @@ public abstract class SpoofRowwise extends SpoofOperator
 		final int n2 = _type.isRowTypeB1() || hasMatrixSideInput(inputs) ?
 			getMinColsMatrixSideInputs(inputs) : -1;
 		allocateOutputMatrix(m, n, n2, out);
+		final boolean flipOut = _type.isRowTypeB1ColumnAgg()
+			&& LibSpoofPrimitives.isFlipOuter(out.getNumRows(), out.getNumColumns());
 		
 		//input preparation
+		MatrixBlock a = inputs.get(0);
 		SideInput[] b = prepInputMatrices(inputs, 1, inputs.size()-1, true, _tB1);
 		double[] scalars = prepInputScalars(scalarObjects);
 		
 		//core parallel execute
 		ExecutorService pool = Executors.newFixedThreadPool( k );
-		int nk = UtilFunctions.roundToNext(Math.min(8*k,m/32), k);
+		int nk = (a instanceof CompressedMatrixBlock) ? k :
+			UtilFunctions.roundToNext(Math.min(8*k,m/32), k);
 		int blklen = (int)(Math.ceil((double)m/nk));
+		if( a instanceof CompressedMatrixBlock )
+			blklen = BitmapEncoder.getAlignedBlocksize(blklen);
+		
 		try
 		{
 			if( _type.isColumnAgg() || _type == RowType.FULL_AGG ) {
 				//execute tasks
 				ArrayList<ParColAggTask> tasks = new ArrayList<ParColAggTask>();
 				for( int i=0; i<nk & i*blklen<m; i++ )
-					tasks.add(new ParColAggTask(inputs.get(0), b, scalars, n, n2, i*blklen, Math.min((i+1)*blklen, m)));
+					tasks.add(new ParColAggTask(a, b, scalars, n, n2, i*blklen, Math.min((i+1)*blklen, m)));
 				List<Future<double[]>> taskret = pool.invokeAll(tasks);	
 				//aggregate partial results
 				int len = _type.isColumnAgg() ? out.getNumRows()*out.getNumColumns() : 1;
@@ -200,7 +216,7 @@ public abstract class SpoofRowwise extends SpoofOperator
 				//execute tasks
 				ArrayList<ParExecTask> tasks = new ArrayList<ParExecTask>();
 				for( int i=0; i<nk & i*blklen<m; i++ )
-					tasks.add(new ParExecTask(inputs.get(0), b, out, scalars, n, n2, i*blklen, Math.min((i+1)*blklen, m)));
+					tasks.add(new ParExecTask(a, b, out, scalars, n, n2, i*blklen, Math.min((i+1)*blklen, m)));
 				List<Future<Long>> taskret = pool.invokeAll(tasks);
 				//aggregate nnz, no need to aggregate results
 				long nnz = 0;
@@ -210,11 +226,18 @@ public abstract class SpoofRowwise extends SpoofOperator
 			}
 			
 			pool.shutdown();
+			if( flipOut ) {
+				fixTransposeDimensions(out);
+				out = LibMatrixReorg.transpose(out, new MatrixBlock(
+					out.getNumColumns(), out.getNumRows(), false));
+			}
 			out.examSparsity();
 		}
 		catch(Exception ex) {
 			throw new DMLRuntimeException(ex);
 		}
+		
+		return out;
 	}
 	
 	public static boolean hasMatrixSideInput(ArrayList<MatrixBlock> inputs) {
@@ -244,6 +267,12 @@ public abstract class SpoofRowwise extends SpoofOperator
 			
 		}
 		out.allocateDenseBlock();
+	}
+	
+	private void fixTransposeDimensions(MatrixBlock out) {
+		int rlen = out.getNumRows();
+		out.setNumRows(out.getNumColumns());
+		out.setNumColumns(rlen);
 	}
 	
 	private void executeDense(double[] a, SideInput[] b, double[] scalars, double[] c, int n, int rl, int ru) 
@@ -281,24 +310,9 @@ public abstract class SpoofRowwise extends SpoofOperator
 		if( a.isEmptyBlock(false) )
 			return;
 		
-		if( !a.isInSparseFormat() ) { //DENSE
-			Iterator<double[]> iter = a.getDenseRowIterator(rl, ru);
-			for( int i=rl; iter.hasNext(); i++ ) {
-				genexec(iter.next(), 0, b, scalars, c, n, i);
-			}
-		}
-		else { //SPARSE
-			Iterator<SparseRow> iter = a.getSparseRowIterator(rl, ru);
-			SparseRow empty = new SparseRowVector(1);
-			for( int i=rl; iter.hasNext(); i++ ) {
-				SparseRow row = iter.next();
-				if( !row.isEmpty() )
-					genexec(row.values(), 
-						row.indexes(), 0, b, scalars, c, row.size(), n, i);
-				else
-					genexec(empty.values(), 
-						empty.indexes(), 0, b, scalars, c, 0, n, i);
-			}
+		Iterator<double[]> iter = a.getDenseRowIterator(rl, ru);
+		for( int i=rl; iter.hasNext(); i++ ) {
+			genexec(iter.next(), 0, b, scalars, c, n, i);
 		}
 	}
 	

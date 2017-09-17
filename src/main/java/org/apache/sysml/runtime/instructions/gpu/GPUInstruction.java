@@ -19,19 +19,22 @@
 
 package org.apache.sysml.runtime.instructions.gpu;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.sysml.api.DMLScript;
 import org.apache.sysml.lops.runtime.RunMRJobs;
 import org.apache.sysml.runtime.DMLRuntimeException;
 import org.apache.sysml.runtime.controlprogram.caching.MatrixObject;
 import org.apache.sysml.runtime.controlprogram.context.ExecutionContext;
 import org.apache.sysml.runtime.instructions.GPUInstructionParser;
 import org.apache.sysml.runtime.instructions.Instruction;
+import org.apache.sysml.runtime.instructions.gpu.context.GPUContext;
 import org.apache.sysml.runtime.matrix.data.Pair;
 import org.apache.sysml.runtime.matrix.operators.Operator;
 import org.apache.sysml.utils.GPUStatistics;
 import org.apache.sysml.utils.Statistics;
 
-public abstract class GPUInstruction extends Instruction
-{
+public abstract class GPUInstruction extends Instruction {
 	public enum GPUINSTRUCTION_TYPE {
 		AggregateUnary,
 		AggregateBinary,
@@ -43,8 +46,11 @@ public abstract class GPUInstruction extends Instruction
 		ArithmeticBinary,
 		BuiltinUnary,
 		BuiltinBinary,
-		Builtin
+		Builtin,
+		MatrixIndexing
 	};
+	
+	private static final Log LOG = LogFactory.getLog(GPUInstruction.class.getName());
 
 	// Memory/conversions
 	public final static String MISC_TIMER_HOST_TO_DEVICE =          "H2D";	// time spent in bringing data to gpu (from host)
@@ -112,6 +118,9 @@ public abstract class GPUInstruction extends Instruction
 	public final static String MISC_TIMER_REDUCE_ALL_KERNEL =                "rallk";  // time spent in reduce all kernel
 	public final static String MISC_TIMER_REDUCE_ROW_KERNEL =                "rrowk";  // time spent in reduce row kernel
 	public final static String MISC_TIMER_REDUCE_COL_KERNEL =                "rcolk";  // time spent in reduce column kernel
+	
+	public final static String MISC_TIMER_RIX_DENSE_OP =                     "drix";    // time spent in the right indexing dense kernel
+	public final static String MISC_TIMER_RIX_SPARSE_DENSE_OP =              "sdrix";   // time spent in the right indexing sparse dense kernel
 
 	// Deep learning operators
 	public final static String MISC_TIMER_ACTIVATION_FORWARD_LIB =         "nnaf";  // time spent in cudnnActivationForward
@@ -120,28 +129,27 @@ public abstract class GPUInstruction extends Instruction
 	public final static String MISC_TIMER_CONVOLUTION_BACKWARD_DATA_LIB =  "nncbd"; // time spent in cudnnConvolutionBackwardData
 	public final static String MISC_TIMER_MAXPOOLING_FORWARD_LIB =         "nnmf";  // time spent in cudnnPoolingForward
 	public final static String MISC_TIMER_MAXPOOLING_BACKWARD_LIB =        "nnmb";  // time spent in cudnnPoolingBackward
-	public final static String MISC_TIMER_BIAS_ADD_LIB =                   "nnba";  // time spent in bias_add cuda kernel
+	public final static String MISC_TIMER_BIAS_ADD_LIB =                   "nnba";  // time spent in bias_add, bias_multiply cuda kernel
 	public final static String MISC_TIMER_RELU_BACKWARD_KERNEL=            "nnrbk"; // time spent in relu_backward cuda kernel
 	public final static String MISC_TIMER_RELU_KERNEL =                    "nnrk";  // time spent in the relu kernel
 	public final static String MISC_TIMER_CUDNN_INIT =                     "nni";   // time spent in initializations for cudnn call
 	public final static String MISC_TIMER_CUDNN_CLEANUP =                  "nnc";   // time spent in cleanup for cudnn call
-
 
 	protected GPUINSTRUCTION_TYPE _gputype;
 	protected Operator _optr;
 
 	protected boolean _requiresLabelUpdate = false;
 
-	public GPUInstruction(String opcode, String istr) {
+	private GPUInstruction(String opcode, String istr) {
 		type = INSTRUCTION_TYPE.GPU;
 		instString = istr;
 
-		//prepare opcode and update requirement for repeated usage
+		// prepare opcode and update requirement for repeated usage
 		instOpcode = opcode;
 		_requiresLabelUpdate = super.requiresLabelUpdate();
 	}
 
-	public GPUInstruction(Operator op, String opcode, String istr) {
+	protected GPUInstruction(Operator op, String opcode, String istr) {
 		this(opcode, istr);
 		_optr = op;
 	}
@@ -185,7 +193,16 @@ public abstract class GPUInstruction extends Instruction
 	public void postprocessInstruction(ExecutionContext ec)
 					throws DMLRuntimeException
 	{
-		//JCuda.cudaDeviceSynchronize();
+		if(DMLScript.SYNCHRONIZE_GPU) {
+			jcuda.runtime.JCuda.cudaDeviceSynchronize();
+		}
+		if(LOG.isDebugEnabled()) {
+			for(GPUContext gpuCtx : ec.getGPUContexts()) {
+				if(gpuCtx != null)
+					gpuCtx.printMemoryInfo(getOpcode());
+			}
+		}
+			
 	}
 
 	/**
@@ -197,10 +214,7 @@ public abstract class GPUInstruction extends Instruction
 	 * @throws DMLRuntimeException if an error occurs
 	 */
 	protected MatrixObject getMatrixInputForGPUInstruction(ExecutionContext ec, String name) throws DMLRuntimeException {
-		long t0 = System.nanoTime();
-		Pair<MatrixObject, Boolean> mb = ec.getMatrixInputForGPUInstruction(name);
-		if (mb.getValue()) GPUStatistics.maintainCPMiscTimes(getExtendedOpcode(), GPUInstruction.MISC_TIMER_HOST_TO_DEVICE, System.nanoTime() - t0);
-		return mb.getKey();
+		return ec.getMatrixInputForGPUInstruction(name, getExtendedOpcode());
 	}
 
 	/**
@@ -208,13 +222,15 @@ public abstract class GPUInstruction extends Instruction
 	 * Also records performance information into {@link Statistics}
 	 * @param ec		active {@link ExecutionContext}
 	 * @param name	name of input matrix (that the {@link ExecutionContext} is aware of)
+	 * @param numRows number of rows of matrix object
+	 * @param numCols number of columns of matrix object
 	 * @return	the matrix object
 	 * @throws DMLRuntimeException	if an error occurs
 	 */
-	protected MatrixObject getDenseMatrixOutputForGPUInstruction(ExecutionContext ec, String name) throws DMLRuntimeException {
-		long t0 = System.nanoTime();
-		Pair<MatrixObject, Boolean> mb = ec.getDenseMatrixOutputForGPUInstruction(name);
-		if (mb.getValue()) GPUStatistics.maintainCPMiscTimes(getExtendedOpcode(), GPUInstruction.MISC_TIMER_ALLOCATE_DENSE_OUTPUT, System.nanoTime() - t0);
+	protected MatrixObject getDenseMatrixOutputForGPUInstruction(ExecutionContext ec, String name, long numRows, long numCols) throws DMLRuntimeException {
+		long t0 = GPUStatistics.DISPLAY_STATISTICS ? System.nanoTime() : 0;
+		Pair<MatrixObject, Boolean> mb = ec.getDenseMatrixOutputForGPUInstruction(name, numRows, numCols);
+		if (GPUStatistics.DISPLAY_STATISTICS && mb.getValue()) GPUStatistics.maintainCPMiscTimes(getExtendedOpcode(), GPUInstruction.MISC_TIMER_ALLOCATE_DENSE_OUTPUT, System.nanoTime() - t0);
 		return mb.getKey();
 	}
 }

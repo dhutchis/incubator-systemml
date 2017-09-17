@@ -19,6 +19,7 @@
 
 package org.apache.sysml.hops;
 
+import org.apache.sysml.api.DMLScript;
 import org.apache.sysml.hops.AggBinaryOp.SparkAggType;
 import org.apache.sysml.hops.rewrite.HopRewriteUtils;
 import org.apache.sysml.lops.Aggregate;
@@ -26,7 +27,7 @@ import org.apache.sysml.lops.Data;
 import org.apache.sysml.lops.Group;
 import org.apache.sysml.lops.Lop;
 import org.apache.sysml.lops.LopsException;
-import org.apache.sysml.lops.RangeBasedReIndex;
+import org.apache.sysml.lops.RightIndex;
 import org.apache.sysml.lops.LopProperties.ExecType;
 import org.apache.sysml.parser.Expression.DataType;
 import org.apache.sysml.parser.Expression.ValueType;
@@ -94,6 +95,17 @@ public class IndexingOp extends Hop
 	public void setColLowerEqualsUpper(boolean passed) {
 		_colLowerEqualsUpper = passed;
 	}
+	
+	@Override
+	public boolean isGPUEnabled() {
+		if(!DMLScript.USE_ACCELERATOR) {
+			return false;
+		}
+		else {
+			// only matrix indexing is supported on GPU
+			return (getDataType() == DataType.MATRIX);
+		}
+	}
 
 	@Override
 	public Lop constructLops()
@@ -122,7 +134,7 @@ public class IndexingOp extends Hop
 							                                       input._dim1, input._dim2, _dim1, _dim2);
 					
 					Lop dummy = Data.createLiteralLop(ValueType.INT, Integer.toString(-1));
-					RangeBasedReIndex reindex = new RangeBasedReIndex(
+					RightIndex reindex = new RightIndex(
 							input.constructLops(), getInput().get(1).constructLops(), getInput().get(2).constructLops(),
 							getInput().get(3).constructLops(), getInput().get(4).constructLops(), dummy, dummy,
 							getDataType(), getValueType(), et);
@@ -158,7 +170,7 @@ public class IndexingOp extends Hop
 							SparkAggType.NONE : SparkAggType.MULTI_BLOCK;
 					
 					Lop dummy = Data.createLiteralLop(ValueType.INT, Integer.toString(-1));
-					RangeBasedReIndex reindex = new RangeBasedReIndex(
+					RightIndex reindex = new RightIndex(
 							input.constructLops(), getInput().get(1).constructLops(), getInput().get(2).constructLops(),
 							getInput().get(3).constructLops(), getInput().get(4).constructLops(), dummy, dummy,
 							getDataType(), getValueType(), aggtype, et);
@@ -167,10 +179,10 @@ public class IndexingOp extends Hop
 					setLineNumbers(reindex);
 					setLops(reindex);
 				}
-				else //CP
+				else //CP or GPU
 				{
 					Lop dummy = Data.createLiteralLop(ValueType.INT, Integer.toString(-1));
-					RangeBasedReIndex reindex = new RangeBasedReIndex(
+					RightIndex reindex = new RightIndex(
 							input.constructLops(), getInput().get(1).constructLops(), getInput().get(2).constructLops(),
 							getInput().get(3).constructLops(), getInput().get(4).constructLops(), dummy, dummy,
 							getDataType(), getValueType(), et);

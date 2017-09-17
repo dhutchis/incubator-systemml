@@ -75,29 +75,47 @@ public class LibSpoofPrimitives
 	}
 	
 	public static void vectOuterMultAdd(double[] a, double[] b, double[] c, int ai, int bi, int ci, int len1, int len2) {
-		//rest, not aligned to 4-blocks
-		final int bn = len1%4;
-		for( int i=0, cix=ci; i < bn; i++, cix+=len2 )
-			if( a[ai+i] != 0 )
-				LibMatrixMult.vectMultiplyAdd(a[ai+i], b, c, bi, cix, len2);
-		
-		//unrolled 4-block (for fewer L1-dcache loads)
-		for( int i=bn, cix=ci+bn*len2; i < len1; i+=4, cix+=4*len2 ) {
-			final int cix1=cix, cix2=cix+len2, cix3=cix+2*len2, cix4=cix+3*len2;
-			final double aval1=a[ai+i], aval2=a[ai+i+1], aval3=a[ai+i+2], aval4=a[ai+i+3];
-			for( int j=0; j<len2; j++ ) {
-				final double bval = b[bi+j];
-				c[cix1 + j] += aval1 * bval;
-				c[cix2 + j] += aval2 * bval;
-				c[cix3 + j] += aval3 * bval;
-				c[cix4 + j] += aval4 * bval;
+		if( isFlipOuter(len1, len2) ) {
+			for( int i=0, cix=ci; i < len2; i++, cix+=len1 ) {
+				final double val = b[bi+i];
+				if( val != 0 )
+					LibMatrixMult.vectMultiplyAdd(val, a, c, ai, cix, len1);
 			}
+		}
+		else {
+			//rest, not aligned to 4-blocks
+			final int bn = len1%4;
+			for( int i=0, cix=ci; i < bn; i++, cix+=len2 )
+				if( a[ai+i] != 0 )
+					LibMatrixMult.vectMultiplyAdd(a[ai+i], b, c, bi, cix, len2);
+			
+			//unrolled 4-block (for fewer L1-dcache loads)
+			for( int i=bn, cix=ci+bn*len2; i < len1; i+=4, cix+=4*len2 ) {
+				final int cix1=cix, cix2=cix+len2, cix3=cix+2*len2, cix4=cix+3*len2;
+				final double aval1=a[ai+i], aval2=a[ai+i+1], aval3=a[ai+i+2], aval4=a[ai+i+3];
+				for( int j=0; j<len2; j++ ) {
+					final double bval = b[bi+j];
+					c[cix1 + j] += aval1 * bval;
+					c[cix2 + j] += aval2 * bval;
+					c[cix3 + j] += aval3 * bval;
+					c[cix4 + j] += aval4 * bval;
+				}
+			}	
 		}	
 	}
 	
 	public static void vectOuterMultAdd(double[] a, double[] b, double[] c, int[] aix, int ai, int bi, int ci, int alen, int len1, int len2) {
-		for( int i=0; i < alen; i++ )
-			LibMatrixMult.vectMultiplyAdd(a[ai+i], b, c, bi, ci+aix[ai+i]*len2, len2);
+		if( isFlipOuter(len1, len2) ) {
+			for( int i=0, cix=ci; i < len2; i++, cix+=len1 ) {
+				final double val = b[bi+i];
+				if( val != 0 )
+					LibMatrixMult.vectMultiplyAdd(val, a, c, aix, ai, cix, alen);
+			}
+		}
+		else {
+			for( int i=0; i < alen; i++ )
+				LibMatrixMult.vectMultiplyAdd(a[ai+i], b, c, bi, ci+aix[ai+i]*len2, len2);
+		}
 	}
 	
 	public static void vectMultAdd(double[] a, double bval, double[] c, int bi, int ci, int len) {
@@ -814,25 +832,25 @@ public class LibSpoofPrimitives
 	
 	public static void vectLogAdd(double[] a, double[] c, int ai, int ci, int len) {
 		for( int j = ai; j < ai+len; j++, ci++)
-			c[ci] += FastMath.log(a[j]);
+			c[ci] += Math.log(a[j]);
 	}
 
 	public static void vectLogAdd(double[] a, double[] c, int[] aix, int ai, int ci, int alen, int len) {
 		for( int j = ai; j < ai+alen; j++ )
-			c[ci + aix[j]] += FastMath.log(a[j]);
+			c[ci + aix[j]] += Math.log(a[j]);
 	}
 	
 	public static double[] vectLogWrite(double[] a, int ai, int len) {
 		double[] c = allocVector(len, false);
 		for( int j = 0; j < len; j++, ai++)
-			c[j] = FastMath.log(a[ai]);
+			c[j] = Math.log(a[ai]);
 		return c;
 	}
 
 	public static double[] vectLogWrite(double[] a, int[] aix, int ai, int alen, int len) {
 		double[] c = allocVector(len, true, Double.NEGATIVE_INFINITY);
 		for( int j = ai; j < ai+alen; j++ )
-			c[aix[j]] = FastMath.log(a[j]);
+			c[aix[j]] = Math.log(a[j]);
 		return c;
 	}
 	
@@ -1434,6 +1452,9 @@ public class LibSpoofPrimitives
 		return mod.execute(in1, in2);
 	}
 	
+	public static boolean isFlipOuter(int len1, int len2) {
+		return (len1 > 64 * len2);
+	}
 	
 	//dynamic memory management
 	
